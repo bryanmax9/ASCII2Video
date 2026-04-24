@@ -1,0 +1,1819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASCII2Video — Convert Video to ASCII Art</title>
+  <style>
+    :root {
+      --green: #00ff41;
+      --blue: #79A4FF;
+      --pink: #ff006e;
+      --bg: #080808;
+      --bg2: #0f0f0f;
+      --bg3: #141414;
+      --border: #1e1e1e;
+      --text: #c9d1d9;
+      --text2: #6e7681;
+      --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Courier New", monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+
+    /* ── Noise overlay ── */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      background-size: 200px;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    /* ── Scanlines ── */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.03) 2px,
+        rgba(0,0,0,0.03) 4px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(8,8,8,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: 0.15em;
+      text-decoration: none;
+    }
+    .nav-logo span { color: var(--blue); }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a {
+      color: var(--text2);
+      text-decoration: none;
+      font-size: 0.78rem;
+      letter-spacing: 0.05em;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--green); }
+
+    /* ── HERO ── */
+    .hero {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 8rem 2rem 4rem;
+      text-align: center;
+      overflow: hidden;
+    }
+    .hero-bg-ascii {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      opacity: 0.07;
+      pointer-events: none;
+    }
+    .hero-bg-ascii pre {
+      font-size: 0.45rem;
+      line-height: 1;
+      color: var(--green);
+      white-space: pre;
+      transform: scale(1.2);
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(0,255,65,0.08);
+      border: 1px solid rgba(0,255,65,0.2);
+      border-radius: 100px;
+      padding: 0.3rem 1rem;
+      font-size: 0.72rem;
+      color: var(--green);
+      letter-spacing: 0.1em;
+      margin-bottom: 2rem;
+    }
+    .hero-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      color: #fff;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 .accent { color: var(--green); }
+    .hero p {
+      font-size: clamp(0.85rem, 2vw, 1rem);
+      color: var(--text2);
+      max-width: 480px;
+      line-height: 1.7;
+      margin-bottom: 3rem;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--green);
+      color: #000;
+    }
+    .btn-primary:hover {
+      background: #1aff5e;
+      transform: translateY(-1px);
+      box-shadow: 0 0 20px rgba(0,255,65,0.3);
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    /* ── SECTION WRAPPER ── */
+    section {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 5rem 2rem;
+    }
+    .section-label {
+      font-size: 0.72rem;
+      color: var(--green);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+    .section-title {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.75rem;
+    }
+    .section-sub {
+      font-size: 0.875rem;
+      color: var(--text2);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.6;
+      max-width: 500px;
+      margin-bottom: 3rem;
+    }
+
+    /* ── HOW IT WORKS ── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+    }
+    .step-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.75rem;
+      transition: border-color 0.2s;
+    }
+    .step-card:hover { border-color: rgba(0,255,65,0.3); }
+    .step-num {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--green);
+      opacity: 0.3;
+      line-height: 1;
+      margin-bottom: 1rem;
+    }
+    .step-title {
+      font-size: 0.9rem;
+      color: #fff;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .step-desc {
+      font-size: 0.78rem;
+      color: var(--text2);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.6;
+    }
+
+    /* ── EXAMPLES ── */
+    .examples-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+    .example-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .example-card:hover {
+      border-color: rgba(121,164,255,0.4);
+      transform: translateY(-2px);
+    }
+    .example-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-red { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green { background: #28c840; }
+    .example-title {
+      font-size: 0.72rem;
+      color: var(--text2);
+      margin-left: 0.5rem;
+      letter-spacing: 0.05em;
+    }
+    .example-ascii-wrap {
+      padding: 1rem;
+      overflow: hidden;
+    }
+    .example-ascii {
+      font-size: 0.42rem;
+      line-height: 1.1;
+      color: var(--green);
+      white-space: pre;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      min-height: 110px;
+    }
+    .example-ascii.blue { color: var(--blue); }
+    .example-ascii.pink { color: var(--pink); }
+    .example-footer {
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--text2);
+      display: flex;
+      justify-content: space-between;
+    }
+    .example-tag {
+      background: rgba(0,255,65,0.1);
+      color: var(--green);
+      border-radius: 3px;
+      padding: 0.1rem 0.4rem;
+      font-size: 0.65rem;
+    }
+    .example-tag.blue { background: rgba(121,164,255,0.1); color: var(--blue); }
+    .example-tag.pink { background: rgba(255,0,110,0.1); color: var(--pink); }
+
+    /* ── CONVERTER ── */
+    #converter {
+      max-width: 1100px;
+    }
+    .converter-layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    @media (max-width: 780px) {
+      .converter-layout { grid-template-columns: 1fr; }
+    }
+
+    /* Drop Zone */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+      background: var(--bg2);
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--green);
+      background: rgba(0,255,65,0.04);
+    }
+    .drop-icon {
+      font-size: 2.5rem;
+      opacity: 0.5;
+    }
+    .drop-text {
+      font-size: 0.82rem;
+      color: var(--text2);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .drop-text strong { color: var(--green); }
+    .drop-formats {
+      font-size: 0.68rem;
+      color: #3a3a3a;
+    }
+    #fileInput { display: none; }
+
+    /* ── Settings Panel ── */
+    .settings-panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .setting-block {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-block:last-child { border-bottom: none; }
+    .setting-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 0.65rem;
+    }
+    .setting-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.06em;
+    }
+    .setting-desc {
+      font-size: 0.65rem;
+      color: var(--text2);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    /* Detail Level — 5-step track */
+    .detail-track {
+      display: flex;
+      gap: 4px;
+    }
+    .detail-step {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .detail-bar-seg {
+      width: 100%;
+      height: 28px;
+      border-radius: 5px;
+      border: 1.5px solid var(--border);
+      background: var(--bg3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.52rem;
+      color: var(--text2);
+      overflow: hidden;
+      transition: all 0.18s;
+      font-family: var(--font-mono);
+      line-height: 1;
+      white-space: nowrap;
+      padding: 0 2px;
+    }
+    .detail-step:hover .detail-bar-seg {
+      border-color: rgba(0,255,65,0.4);
+      color: var(--green);
+    }
+    .detail-step.active .detail-bar-seg {
+      border-color: var(--green);
+      background: rgba(0,255,65,0.08);
+      color: var(--green);
+    }
+    .detail-step-label {
+      font-size: 0.62rem;
+      color: var(--text2);
+      transition: color 0.18s;
+      text-align: center;
+    }
+    .detail-step.active .detail-step-label { color: var(--green); }
+
+    /* Speed pills */
+    .speed-pills {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+    }
+    .speed-pill {
+      padding: 0.45rem 0;
+      text-align: center;
+      border-radius: 5px;
+      border: 1.5px solid var(--border);
+      background: var(--bg3);
+      font-size: 0.68rem;
+      color: var(--text2);
+      cursor: pointer;
+      transition: all 0.18s;
+      font-family: var(--font-mono);
+    }
+    .speed-pill:hover { border-color: rgba(0,255,65,0.4); color: var(--green); }
+    .speed-pill.active { border-color: var(--green); background: rgba(0,255,65,0.08); color: var(--green); }
+    .speed-sub { font-size: 0.55rem; color: inherit; opacity: 0.6; margin-top: 2px; }
+
+    /* Style cards */
+    .style-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+    .style-card {
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg3);
+      padding: 0.5rem 0.4rem 0.4rem;
+      cursor: pointer;
+      transition: all 0.18s;
+      text-align: center;
+    }
+    .style-card:hover { border-color: rgba(0,255,65,0.4); }
+    .style-card.active { border-color: var(--green); background: rgba(0,255,65,0.07); }
+    .style-prev {
+      font-size: 0.5rem;
+      font-family: var(--font-mono);
+      color: var(--text2);
+      line-height: 1.3;
+      margin-bottom: 4px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .style-card.active .style-prev { color: var(--green); }
+    .style-name {
+      font-size: 0.62rem;
+      color: var(--text2);
+      font-family: var(--font-mono);
+    }
+    .style-card.active .style-name { color: var(--green); }
+
+    /* Invert toggle — two-button segment */
+    .invert-seg {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+    .invert-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      padding: 0.55rem 0.4rem;
+      border-radius: 6px;
+      border: 1.5px solid var(--border);
+      background: var(--bg3);
+      cursor: pointer;
+      transition: all 0.18s;
+      font-family: var(--font-mono);
+    }
+    .invert-btn:hover { border-color: rgba(0,255,65,0.4); }
+    .invert-btn.active { border-color: var(--green); background: rgba(0,255,65,0.07); }
+    .invert-swatch {
+      width: 100%;
+      height: 20px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.5rem;
+      font-family: var(--font-mono);
+      letter-spacing: 0.05em;
+      overflow: hidden;
+    }
+    .invert-swatch-dark  { background: #111; color: var(--green); }
+    .invert-swatch-light { background: #e8e8e8; color: #111; }
+    .invert-label {
+      font-size: 0.62rem;
+      color: var(--text2);
+    }
+    .invert-btn.active .invert-label { color: var(--green); }
+
+    .process-btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: var(--green);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .process-btn:hover:not(:disabled) {
+      background: #1aff5e;
+      box-shadow: 0 0 20px rgba(0,255,65,0.4);
+    }
+    .process-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .process-btn.cancel {
+      background: transparent;
+      color: var(--pink);
+      border: 1px solid var(--pink);
+    }
+
+    /* ── Export Bar ── */
+    .export-bar {
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1rem;
+      border-top: 1px solid var(--border);
+      background: var(--bg3);
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+    .export-bar.visible { display: flex; }
+    .export-label {
+      font-size: 0.62rem;
+      color: var(--text2);
+      letter-spacing: 0.12em;
+      margin-right: 0.25rem;
+      flex-shrink: 0;
+    }
+    .export-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.38rem 0.8rem;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+      border: 1.5px solid transparent;
+      white-space: nowrap;
+    }
+    .export-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .export-btn-video {
+      background: rgba(0,255,65,0.12);
+      color: var(--green);
+      border-color: rgba(0,255,65,0.35);
+    }
+    .export-btn-video:hover:not(:disabled) {
+      background: rgba(0,255,65,0.22);
+      box-shadow: 0 0 12px rgba(0,255,65,0.2);
+    }
+    .export-btn-embed {
+      background: rgba(121,164,255,0.1);
+      color: var(--blue);
+      border-color: rgba(121,164,255,0.3);
+    }
+    .export-btn-embed:hover:not(:disabled) {
+      background: rgba(121,164,255,0.2);
+      box-shadow: 0 0 12px rgba(121,164,255,0.2);
+    }
+    .export-btn-json {
+      background: rgba(255,255,255,0.05);
+      color: var(--text2);
+      border-color: var(--border);
+    }
+    .export-btn-json:hover:not(:disabled) {
+      color: var(--text);
+      border-color: #444;
+    }
+    .export-icon { font-size: 0.75rem; }
+
+    /* Recording progress overlay on output-body */
+    .recording-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(8,8,8,0.88);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      z-index: 10;
+      border-radius: 0;
+    }
+    .recording-overlay.visible { display: flex; }
+    .recording-ring {
+      width: 48px; height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .recording-text { font-size: 0.78rem; color: var(--green); }
+    .recording-sub { font-size: 0.68rem; color: var(--text2); }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.7rem 1.25rem;
+      font-size: 0.78rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      z-index: 999;
+      transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+      opacity: 0;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .toast-icon { font-size: 1rem; }
+    .toast.success { border-color: rgba(0,255,65,0.4); color: var(--green); }
+    .toast.error   { border-color: rgba(255,0,110,0.4); color: var(--pink); }
+    .toast.info    { border-color: rgba(121,164,255,0.4); color: var(--blue); }
+
+    /* Output Panel */
+    .output-panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      min-height: 400px;
+      display: flex;
+      flex-direction: column;
+    }
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1rem;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .output-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .output-header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .output-title {
+      font-size: 0.72rem;
+      color: var(--text2);
+      letter-spacing: 0.05em;
+    }
+    .output-status {
+      font-size: 0.65rem;
+      color: var(--green);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .output-status.visible { opacity: 1; }
+    .output-body {
+      flex: 1;
+      overflow: auto;
+      padding: 1rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    #asciiOutput {
+      font-size: 0.5rem;
+      line-height: 1.15;
+      color: var(--green);
+      white-space: pre;
+      font-family: var(--font-mono);
+      text-align: left;
+    }
+    #asciiOutput.blue { color: var(--blue); }
+    #asciiOutput.pink { color: var(--pink); }
+    #asciiOutput.white { color: #e0e0e0; }
+
+    /* Playback Controls */
+    .playback {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1rem;
+      border-top: 1px solid var(--border);
+      background: var(--bg3);
+      flex-shrink: 0;
+    }
+    .play-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.3rem 0.7rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .play-btn:hover { border-color: var(--green); color: var(--green); }
+    .play-btn.active { background: var(--green); color: #000; border-color: var(--green); }
+    .frame-counter {
+      font-size: 0.68rem;
+      color: var(--text2);
+      margin-left: auto;
+    }
+    .color-btns {
+      display: flex;
+      gap: 4px;
+    }
+    .color-dot {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .color-dot:hover { transform: scale(1.2); }
+    .color-dot.active { border-color: #fff; }
+    .color-dot-green { background: var(--green); }
+    .color-dot-blue { background: var(--blue); }
+    .color-dot-pink { background: var(--pink); }
+    .color-dot-white { background: #e0e0e0; }
+
+    /* Progress Bar */
+    .progress-wrap {
+      padding: 0 1rem 0.75rem;
+      background: var(--bg3);
+      display: none;
+    }
+    .progress-wrap.visible { display: block; }
+    .progress-bar-bg {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 2px;
+      transition: width 0.1s;
+      width: 0%;
+    }
+    .progress-text {
+      font-size: 0.65rem;
+      color: var(--text2);
+      margin-top: 0.3rem;
+      text-align: center;
+    }
+
+    /* Placeholder state */
+    .placeholder-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 1rem;
+      opacity: 0.3;
+      padding: 3rem;
+    }
+    .placeholder-ascii {
+      font-size: 0.7rem;
+      line-height: 1.2;
+      color: var(--green);
+      white-space: pre;
+      text-align: center;
+    }
+    .placeholder-hint {
+      font-size: 0.72rem;
+      color: var(--text2);
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid var(--border);
+      padding: 2rem;
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--text2);
+    }
+    footer a { color: var(--green); text-decoration: none; }
+
+    /* ── Animations ── */
+    @keyframes scanline {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100vh); }
+    }
+    .glow-text { text-shadow: 0 0 20px rgba(0,255,65,0.5); }
+    .blink { animation: blink 1.2s step-end infinite; }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* Fade in sections */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .fade-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav>
+  <a href="#" class="nav-logo">ASCII<span>2</span>VIDEO</a>
+  <ul class="nav-links">
+    <li><a href="#examples">Examples</a></li>
+    <li><a href="#converter">Converter</a></li>
+    <li><a href="https://github.com/bryanmax9/ASCII2Video" target="_blank">GitHub</a></li>
+  </ul>
+</nav>
+
+<!-- ── HERO ── -->
+<div class="hero">
+  <div class="hero-bg-ascii">
+    <pre id="heroBgAscii"></pre>
+  </div>
+
+  <div class="hero-badge">BROWSER-BASED ASCII CONVERTER</div>
+
+  <h1>Turn Video Into<br><span class="accent glow-text">ASCII Art</span></h1>
+
+  <p>Drop any video file and watch it transform into animated ASCII characters — right in your browser, no uploads, no servers.</p>
+
+  <div class="hero-cta">
+    <a href="#converter" class="btn btn-primary">&#9654; Start Converting</a>
+    <a href="#examples" class="btn btn-secondary">View Examples</a>
+  </div>
+</div>
+
+<!-- ── HOW IT WORKS ── -->
+<section class="fade-in">
+  <div class="section-label">// PROCESS</div>
+  <h2 class="section-title">How It Works</h2>
+  <p class="section-sub">Three steps from raw video to glowing ASCII art. All processing happens locally in your browser.</p>
+
+  <div class="steps">
+    <div class="step-card">
+      <div class="step-num">01</div>
+      <div class="step-title">Drop Your Video</div>
+      <div class="step-desc">Upload any .mp4, .mov, .webm, .avi, or .mkv file. Works entirely in the browser — your file never leaves your device.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">02</div>
+      <div class="step-title">Frame Sampling</div>
+      <div class="step-desc">Each frame is drawn to a canvas, pixel data extracted, and luminance calculated using the ITU-R BT.601 formula: 0.299R + 0.587G + 0.114B.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">03</div>
+      <div class="step-title">Character Mapping</div>
+      <div class="step-desc">Luminance maps to a 70-character density ramp from space to @. Lower threshold reveals more detail; invert flips dark/light.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">04</div>
+      <div class="step-title">Animate & Export</div>
+      <div class="step-desc">All frames play back at your chosen FPS. Change colors, adjust columns, and watch your video rendered in pure text.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── EXAMPLES ── -->
+<section id="examples" class="fade-in">
+  <div class="section-label">// GALLERY</div>
+  <h2 class="section-title">Live Examples</h2>
+  <p class="section-sub">Real video footage converted to ASCII art using the same algorithm. Each card shows animated frames.</p>
+
+  <div class="examples-grid">
+
+    <div class="example-card">
+      <div class="example-header">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <span class="example-title">sample-video.mp4 — cols:80 lum:30</span>
+      </div>
+      <div class="example-ascii-wrap">
+        <pre class="example-ascii" id="ex1"></pre>
+      </div>
+      <div class="example-footer">
+        <span>80 col &times; 20 row &bull; 29 frames</span>
+        <span class="example-tag">GREEN</span>
+      </div>
+    </div>
+
+    <div class="example-card">
+      <div class="example-header">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <span class="example-title">sample-video.mp4 — inverted</span>
+      </div>
+      <div class="example-ascii-wrap">
+        <pre class="example-ascii blue" id="ex2"></pre>
+      </div>
+      <div class="example-footer">
+        <span>80 col &times; 20 row &bull; inverted chars</span>
+        <span class="example-tag blue">BLUE</span>
+      </div>
+    </div>
+
+    <div class="example-card">
+      <div class="example-header">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <span class="example-title">sample-video.mp4 — cols:80 lum:60</span>
+      </div>
+      <div class="example-ascii-wrap">
+        <pre class="example-ascii pink" id="ex3"></pre>
+      </div>
+      <div class="example-footer">
+        <span>80 col &times; 20 row &bull; high threshold</span>
+        <span class="example-tag pink">PINK</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── CONVERTER ── -->
+<section id="converter" class="fade-in">
+  <div class="section-label">// CONVERTER</div>
+  <h2 class="section-title">Convert Your Video</h2>
+  <p class="section-sub">Drop a video file and tune the settings to get your perfect ASCII animation.</p>
+
+  <div class="converter-layout">
+
+    <!-- Left: Controls -->
+    <div style="display: flex; flex-direction: column; gap: 1rem;">
+
+      <!-- Drop Zone -->
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-icon" id="dropIcon">&#128250;</div>
+        <div class="drop-text" id="dropText"><strong>Drop video here</strong><br>or click to browse</div>
+        <div class="drop-formats" id="dropFormats">.mp4 .mov .webm .avi .mkv &bull; max 200MB</div>
+        <input type="file" id="fileInput" accept="video/*" />
+      </div>
+
+      <!-- Settings -->
+      <div class="settings-panel">
+
+        <!-- 1. DETAIL LEVEL -->
+        <div class="setting-block">
+          <div class="setting-head">
+            <span class="setting-title">Detail Level</span>
+            <span class="setting-desc" id="detailDesc">Balanced &bull; 80 cols</span>
+          </div>
+          <div class="detail-track" id="detailTrack">
+            <div class="detail-step" data-idx="0">
+              <div class="detail-bar-seg"> .  . </div>
+              <div class="detail-step-label">Outline</div>
+            </div>
+            <div class="detail-step" data-idx="1">
+              <div class="detail-bar-seg">.:~+</div>
+              <div class="detail-step-label">Sketch</div>
+            </div>
+            <div class="detail-step active" data-idx="2">
+              <div class="detail-bar-seg">fxz#W</div>
+              <div class="detail-step-label">Normal</div>
+            </div>
+            <div class="detail-step" data-idx="3">
+              <div class="detail-bar-seg">nzXM&amp;@</div>
+              <div class="detail-step-label">Detailed</div>
+            </div>
+            <div class="detail-step" data-idx="4">
+              <div class="detail-bar-seg">%B@$██</div>
+              <div class="detail-step-label">Ultra</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. ANIMATION SPEED -->
+        <div class="setting-block">
+          <div class="setting-head">
+            <span class="setting-title">Animation Speed</span>
+            <span class="setting-desc" id="speedDesc">10 fps</span>
+          </div>
+          <div class="speed-pills" id="speedPills">
+            <div class="speed-pill" data-idx="0">
+              Slow<div class="speed-sub">5 fps</div>
+            </div>
+            <div class="speed-pill active" data-idx="1">
+              Normal<div class="speed-sub">10 fps</div>
+            </div>
+            <div class="speed-pill" data-idx="2">
+              Fast<div class="speed-sub">20 fps</div>
+            </div>
+            <div class="speed-pill" data-idx="3">
+              Max<div class="speed-sub">30 fps</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. ART STYLE -->
+        <div class="setting-block">
+          <div class="setting-head">
+            <span class="setting-title">Art Style</span>
+            <span class="setting-desc">Character density pattern</span>
+          </div>
+          <div class="style-grid" id="styleGrid">
+            <div class="style-card active" data-style="standard">
+              <div class="style-prev">.$@B%8&amp;<br>W#*ozxnuv</div>
+              <div class="style-name">Classic</div>
+            </div>
+            <div class="style-card" data-style="retro">
+              <div class="style-prev">. : - =<br>+ * # %</div>
+              <div class="style-name">Retro</div>
+            </div>
+            <div class="style-card" data-style="blocks">
+              <div class="style-prev">░░▒▒<br>▓▓██</div>
+              <div class="style-name">Blocks</div>
+            </div>
+            <div class="style-card" data-style="minimal">
+              <div class="style-prev">. · :<br>* # @</div>
+              <div class="style-name">Minimal</div>
+            </div>
+            <div class="style-card" data-style="binary">
+              <div class="style-prev">0 0 1<br>1 0 1</div>
+              <div class="style-name">Digital</div>
+            </div>
+            <div class="style-card" data-style="braille">
+              <div class="style-prev">⠁⠃⠇⠧<br>⠷⠿⣿</div>
+              <div class="style-name">Braille</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. LOOK -->
+        <div class="setting-block">
+          <div class="setting-head">
+            <span class="setting-title">Brightness Mode</span>
+            <span class="setting-desc">Which areas are filled</span>
+          </div>
+          <div class="invert-seg" id="invertSeg">
+            <div class="invert-btn active" data-invert="false">
+              <div class="invert-swatch invert-swatch-dark">$@B%8W#</div>
+              <div class="invert-label">Darks filled</div>
+            </div>
+            <div class="invert-btn" data-invert="true">
+              <div class="invert-swatch invert-swatch-light">$@B%8W#</div>
+              <div class="invert-label">Lights filled</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 1rem 1.25rem;">
+          <button class="process-btn" id="processBtn" disabled>&#9654; CONVERT VIDEO</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Right: Output -->
+    <div class="output-panel">
+      <div class="output-header">
+        <div class="output-header-left">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+          <span class="output-title" id="outputTitle">ascii-output</span>
+        </div>
+        <div class="output-header-right">
+          <div class="color-btns">
+            <div class="color-dot color-dot-green active" data-color="green" title="Green"></div>
+            <div class="color-dot color-dot-blue" data-color="blue" title="Blue"></div>
+            <div class="color-dot color-dot-pink" data-color="pink" title="Pink"></div>
+            <div class="color-dot color-dot-white" data-color="white" title="White"></div>
+          </div>
+          <span class="output-status" id="outputStatus">● LIVE</span>
+        </div>
+      </div>
+
+      <div class="output-body" style="position:relative;">
+        <div class="placeholder-state" id="placeholder">
+          <div class="placeholder-ascii">
+  ██████╗ ██████╗  ██████╗ ██████╗
+ ██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
+ ██║  ██║██████╔╝██║   ██║██████╔╝
+ ██║  ██║██╔══██╗██║   ██║██╔═══╝
+ ██████╔╝██║  ██║╚██████╔╝██║
+ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝</div>
+          <div class="placeholder-hint">Drop a video to begin</div>
+        </div>
+        <pre id="asciiOutput" style="display:none;"></pre>
+        <!-- Recording overlay shown during WebM export -->
+        <div class="recording-overlay" id="recordingOverlay">
+          <div class="recording-ring"></div>
+          <div class="recording-text" id="recordingText">Rendering video…</div>
+          <div class="recording-sub" id="recordingSub">Frame 0 / 0</div>
+        </div>
+      </div>
+
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-text" id="progressText">Processing...</div>
+      </div>
+
+      <div class="playback">
+        <button class="play-btn active" id="playBtn" onclick="togglePlay()">&#9646;&#9646; PAUSE</button>
+        <button class="play-btn" onclick="stepFrame(-1)">&#9664; PREV</button>
+        <button class="play-btn" onclick="stepFrame(1)">NEXT &#9654;</button>
+        <span class="frame-counter" id="frameCounter">—</span>
+      </div>
+
+      <!-- Export bar — hidden until frames are ready -->
+      <div class="export-bar" id="exportBar">
+        <span class="export-label">EXPORT</span>
+        <button class="export-btn export-btn-video" id="btnWebm">
+          <span class="export-icon">&#9660;</span> Download Video
+        </button>
+        <button class="export-btn export-btn-embed" id="btnEmbed">
+          <span class="export-icon">&lt;/&gt;</span> Copy Embed
+        </button>
+        <button class="export-btn export-btn-json" id="btnJson">
+          <span class="export-icon">&#123;&#125;</span> JSON Data
+        </button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Toast notification -->
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toastIcon"></span>
+  <span id="toastMsg"></span>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <p>Built with the ASCII conversion algorithm from <a href="https://asciistudio.space" target="_blank">ASCII Studio</a> &bull; Runs entirely in your browser</p>
+</footer>
+
+<script>
+// ── ASCII Conversion Algorithm (ported from ascii-studio/src/lib/ascii-processor.ts) ──
+
+const CHARSET_MAP = {
+  standard: " .'`^,:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
+  retro:    " .:-=+*#%@",
+  minimal:  " .:*#@",
+  blocks:   " ░▒▓█",
+  binary:   " .01",
+  braille:  " ⠁⠃⠇⠗⠷⠿⣿",
+};
+
+// ── User-friendly setting presets ──
+const DETAIL_PRESETS = [
+  { cols: 40,  lum: 70, label: "Outline",  desc: "Bare shapes • 40 cols" },
+  { cols: 60,  lum: 50, label: "Sketch",   desc: "Rough detail • 60 cols" },
+  { cols: 80,  lum: 30, label: "Normal",   desc: "Balanced • 80 cols" },
+  { cols: 120, lum: 18, label: "Detailed", desc: "Sharp detail • 120 cols" },
+  { cols: 180, lum: 8,  label: "Ultra",    desc: "Maximum • 180 cols" },
+];
+const SPEED_PRESETS = [
+  { fps: 5,  desc: "5 fps" },
+  { fps: 10, desc: "10 fps" },
+  { fps: 20, desc: "20 fps" },
+  { fps: 30, desc: "30 fps" },
+];
+
+let activeDetail = 2;     // index into DETAIL_PRESETS (Normal)
+let activeSpeed  = 1;     // index into SPEED_PRESETS (Normal = 10fps)
+let activeStyle  = "standard";
+let activeInvert = false;
+
+const FONT_RATIO = 0.44;
+
+// Frames from ascii-studio/public/frames/
+const EXAMPLE_FRAMES = ["                        .........''''''''''''''''........                       \n                              ..''''...'''''''......'.                          \n                           .....''''''''''''''''''''.``''`^'..                  \n                          ........''''''...'''''''..`_i`,;1z>.                  \n     '.                 .......''''''''''`'``'''''''^^```,:+>`'.                \n   '!ii!,            ..''. .'''''''.''''````''.''''`^:<(t<;,,^'.               I\n'`,;I:^,I.           .`',?v1,^`'''.'''``''''''''''`^,!]Lhvxf~,'                .\ni__<>l,`^'          .'^)j1{~;,'''''``'`'.'''''``''`,I_{f-_{r/:'.               `\nmoQ}{1[+>>I^'       .`I{i::::II:^^`'''''`````'''''^;<Xqd1i!l;,'.     '``,I:,^^[O\n%%oJmW#kC{_>I'      '`:::!ili<>>I``''```^^,,,^^^^,,;li~1bQf?!:`.   .':~xQq(~<i<_\n&88%%%%B$O]+i,    .`,;!<_]/Xn]iI:^````^^,:Il<-_~il;;Il>)hk0j+i:.....`l}j(1tYLLL|\n888%MoaMBU?>:`.  '`:>[Jwwh88j]~!;,^^,::,:l+vb#M#J+~<>>?(?<ii>>i^.   ';:,!+}v%BB#\n%8%quf||C]<!,`.  ',<[YBB%%88mr)?<il;Il;;li~)(fzYzu|})Lf~<>i>!;:`.   '`,I>?)Y8888\na%#f1]_<iiiil,'''^;+{ZB88888%*qZC/-~!:,I;::;li<+?n*k*@q{-<ii!:'''`^;!<_]1fCW%%8%\nfMMj1[-+<<>i>i!;^^;<]cW8%88888%%BMJ}_i;,`^^,;i>_{/hB%8&x}+ii>iI,,I<[0Z0Zd*%%aJuU\nCM%hYnxxCmOx_~>>!I!i~?|vmW8888888%8u}_iI;;;li<_[/X#888%Q(]~iii>i!~{O@B%%%%%ox)]<\nB%8%8WMW%%@a([~>iiiii<_{tC88888888%q/[+>i><_[/XOdW88888WU(?~iiii~]v%%88888%kj)?<\ndk*%8888888%Z|]+>iii><?)r0888888888%Z{?++-XqkM%%%88888888dv}~>ii+]c8%8888888mr1]\n-1jO8%888888%bx]+<<<-X0wo8888888888%J{]-?[Q$%%88888888888@*)_>ii>_/c#%888888%#da\ni~-}0WMMMMMMMW#Zn1[1UW8&WWMWWMMMMMMWq{_+_}wWMMMWMMMMMMMMMWb}~iiii>+?JWMMMMMMMWWW\n", "                        .........''''''''''''''''........                       \n                              ..''''...'''''''....'.'.                          \n                           .....''''''''''''''''''''.,`..'^,'.                  \n                         ..... ...''''''...'''''''..'!:``^I|-.                  \n    .lI'                .......''''''''''`'``''''''```^,;^^,:'..                \n   'I+}{<            ..''.'''''''''.''''````''.''''`^:-nZ/I``''                 \n '```''`;'           ..',[(l,``'''''''``''''''''''`^,I<-](-|I'.                 \nli<<ii!II;`.          ;)!l;::l;``''`''`''''''`''''^,l{v{!li[!'.       .`,i]<:^. \nZJrfYZmC(+>:.        .;i,;<?)C];^^`'''''`^^,,^^``^,;i[Yqn_!;,`'.     .^l1Ubd_<l!\nBB8&&#MB%j~i`.      '`^:I!{j?>!I,``''```^,;Il><>lIII!i>c$oz-!;'.     .;<<<]CmZX]\n88W0x/(/C/l;`     .'^;i~-{nX]iI,^`'```^^,;i)QkohQ|~~+<]CX|{_>l'       ,,^Ii_(c%p\n&%q){]+>!iI^'.   .',!+)Lb#@d1]~!I:,^,;:,;!+fxxvJbMY|)rJ}<>!;:^..      .'^I<?1q%%\nCBa([-~>iiil;^'.  ';~]Y@%%88qcf1-<iII:,:lIII!>+?{Q%*o%w}?~!;^''.  .'^I!<_]1rw%%B\n)k%qn({[-__<>i;`''`:>]cB%888%&M*Zr]_i:,,^^^,:l>_{/kB%8&X1?<iiI,'''^!+(CLOwhWB#mC\n)m%%&hqwwbhO{<>l^`^,!_|Qk&88888%%&O(-i;,^`^^:i<-1fk%88%*x}_>i>>I^,l_{C@B%%%%hn{-\npW888%%%%%%J)-<>!II!i>_}fQ88888888Bm(->I;;Ii~-1jYp&8888%#c}_>i>i;I~{J&88888%L/}+\nh%888888888Q|}+>iiiii<-{tC888888888%X[_<<+}|n0oM8%888888Bk/[+>iii>-(*B88888%dx1-\n)JM%88888888Zt}-~<~+[|jXwW888888888Wn)]??toW8%%8888888888%w|]<iii>~[nd%888888*qm\n-{u#%8888888%*Cf{}{jb&W%%%88888888%8Y)}[{jM%88888%%888888%BX]+>iii>+[(p%88888%BB\n>+?XWMMMMMMMMWW*pZq*WWWWMMMWWMMMMMMWaJxjvwMMMMMW#bkMWMMMMMWQ_<iiiiii~-zWMMMMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...'''''''....'...                          \n                           .....''''''''''''''''''........':,                   \n                         ..... ...''''''...'''''''..'```''^i_.                  \n    '<~,                .......''''''''''`'``'''''''`^;i]);^''.                 \n   .,>?]l             . ...''''''''.''''````''.''''`^:_/x0],`'.                 \n  '``''',`            .`:;;,''`'''''''``''''''''''`^,;lI;I~[`'           .^;ll^ \nIii_/XJf>l^           `l:,,if1;,`''`''``'`````````^,I)Z)<l!i^'          .I>>_fzv\nqwOCJCw*z>i`         .`,:IjbQti:^``''''`^^,;IIIIIIIli_jbhJ[!:`'.       ';!Il!>|%\n%BO{?_~_?lI^.       .`,;!i(jiII:^`''''``^,l>[vLLc)_++~_qdmY~!^'.       :,.'^:>_a\nBk}[?+<iI,^'      .'`;>~]tZt+>l:,`'```^^,Ii}CqhMB&Z|}}xf_>il:'.        . '^:l>1M\nmWY(1{{{}+iI,'.   .`I~?Xh8BJ(}_<il:,:;:,I!i<<+?)nm%h0bb]->;^'..    ..^:;Ii>~-|dB\n?LBoppa*#bc}+i:'. .`;<}b@888dQJf]+<iI,^^::,:I!<_}(ZBBBMj}+il;^'.. .'I>]rzLLLw&hn\n?jM%%%%%%%Bhv_>,''.`:i]c&%88%%BWwu{_i;,^^^^^,;>_{fp%88%q|[+>>i!:''':>_)b@B%%%m(-\n(J&888888%bzj_>i;``^,!_1up%88888%%br?>I,^^,:l>-1tL888888wr}_>i>i:`^;>[|O%88%bt{-\nq88888888%L/}_>iilII!>_{/Q%8888888%Mf->IIl>_1cOwhW888888%&J[+>>i;,;i-rd&8888*n)-\nxo%8888888#Qt[_<>>><~-{/zo%8888888%kt}-+_(zQa%B%%88888888BO1?<iii!i<]JW%88888hUn\n{n#88888888%hz|}]]]/wZZbW888888888%bf)}{1UB%%888888888888%at}+iiiii>_[xo%8888%%8\n]1LB88888888%%aOYXChBBB%%888888888%&Qr//xw%8888%%88%%88888%L}_>iiiii>_[jk%888888\n<_uWMMMMMMMMMWW&WWWWMMMMMMMMMMMMMMMWWappaWMMMMW*QzcUdWMMMMW*/~iiiiiiii~?xMMMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...'''''''....'...                          \n                           .....''''''''''''''''''........':,                   \n                         ..... ...''''''...'''''''..'```''^i_.                  \n    '<~,                .......''''''''''`'``'''''''`^;i]);^''.                 \n   .,>?]l             . ...''''''''.''''````''.''''`^:_/x0],`'.                 \n  '``''',`            .`:;;,''`'''''''``''''''''''`^,;lI;I~[`'           .^;ll^ \nIii_/XJf>l^           `l:,,if1;,`''`''``'`````````^,I)Z)<l!i^'          .I>>_fzv\nqwOCJCw*z>i`         .`,:IjbQti:^``''''`^^,;IIIIIIIli_jbhJ[!:`'.       ';!Il!>|%\n%BO{?_~_?lI^.       .`,;!i(jiII:^`''''``^,l>[vLLc)_++~_qdmY~!^'.       :,.'^:>_a\nBk}[?+<iI,^'      .'`;>~]tZt+>l:,`'```^^,Ii}CqhMB&Z|}}xf_>il:'.        . '^:l>1M\nmWY(1{{{}+iI,'.   .`I~?Xh8BJ(}_<il:,:;:,I!i<<+?)nm%h0bb]->;^'..    ..^:;Ii>~-|dB\n?LBoppa*#bc}+i:'. .`;<}b@888dQJf]+<iI,^^::,:I!<_}(ZBBBMj}+il;^'.. .'I>]rzLLLw&hn\n?jM%%%%%%%Bhv_>,''.`:i]c&%88%%BWwu{_i;,^^^^^,;>_{fp%88%q|[+>>i!:''':>_)b@B%%%m(-\n(J&888888%bzj_>i;``^,!_1up%88888%%br?>I,^^,:l>-1tL888888wr}_>i>i:`^;>[|O%88%bt{-\nq88888888%L/}_>iilII!>_{/Q%8888888%Mf->IIl>_1cOwhW888888%&J[+>>i;,;i-rd&8888*n)-\nxo%8888888#Qt[_<>>><~-{/zo%8888888%kt}-+_(zQa%B%%88888888BO1?<iii!i<]JW%88888hUn\n{n#88888888%hz|}]]]/wZZbW888888888%bf)}{1UB%%888888888888%at}+iiiii>_[xo%8888%%8\n]1LB88888888%%aOYXChBBB%%888888888%&Qr//xw%8888%%88%%88888%L}_>iiiii>_[jk%888888\n<_uWMMMMMMMMMWW&WWWWMMMMMMMMMMMMMMMWWappaWMMMMW*QzcUdWMMMMW*/~iiiiiiii~?xMMMMMMM\n", "                        .........''''''''''''''''.....'..                       \n                              ..''''...'''''''....'...                          \n                           .....''''''''''''''''''...'....':,                   \n                         ..... ...''''''...'''''''..'```''^i_                   \n    '<~,                .......''''''''''`'``'''''''`^;i]);^''.                 \n   .,>?]l             . ...''''''''.''''````''.''''`^:_/x0],`'.                 \n  '``''',`.           .`:;;,''`'''''''``''''''''''`^,;lI;I~[`'           .^;ll^ \nIii_/XJf>l^           `l:,,if1;,`''`''``'`````````^,I)Z)<l!i^'          .I>>_fzv\nqwOCJCw*z>i`         .`,:IjbQti:^``''''`^^,;IIIIIIIli_jbhJ[!:`'        ';!Il!>|%\n%BO{?_~_?lI^.       '`,;!i(jiII:^`''''``^,l>[vLLc)_++~_qdmY~!^'.       :,.'^:>_a\nBk}[?+<iI,^'      .'`;>~]tZt+>l:,`'```^^,Ii}CqhMB&Z|}}xf_>il:'.        . '^:l>1M\nmWY(1{{{}+iI,'.   .`I~?Xh8BJ(}_<il:,:;:,I!i<<+?)nm%h0bb]->;^'..    ..^:;Ii>~-|dB\n?L%oppa*#bc}+i:'. .`;<}b@888dQJf]+<iI,^^::,:I!<_}(ZBBBMj}+il;^'.. .'I>]rzLLLw&hn\n?jM%%%%%%%Bhv_>,''.`:i]c&%88%%BWwu{_i;,^^^^^,;>_{fp%88%q|[+>>i!:''':>_)b@B%%%m(-\n(J&888888%bzj_>i;``^,!_1up%88888%%br?>I,^^,:l>-1tL888888wr}_>i>i:`^;>[|O%88%bt{-\nq88888888%L/}_>iilII!>_{/Q%8888888%Mf->IIl>_1cOwhW888888%&J[+>>i;,;i-rd&8888*n)-\nxo%8888888#Qt[_<>>><~-{/zo%8888888%kt}-+_(zQa%B%%88888888BO1?<iii!i<]JW%88888hUn\n{n#88888888%kz|}]]]/wZZbW888888888%bf)}{1UBB%888888888888%at}+iiiii>_[xo%8888%%8\n]1LB88888888%%aOYXChBBB%%888888888%&Qr//xw%8888%%88%%88888%L}_>iiiii>_[jk%888888\n<_uWMMMMMMMMMWW&WWWWMMMMMMMMMMMMMMMWWappaWMMMMW*QzcUdWMMMMW*/~iiiiiiii~?xMMMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...'''''''....'...                          \n                           .....'''''''''''''''''''..'.....^:                   \n                         ..... ...''''''...'''''''..''`^````,                   \n     ,>,                .......''''''''''`'``''''''`^;[)n(,'..                  \n    ''II;'            ..'''''''''''.''''````''.'''``,:IIl!:^'..            ',li;\n.```,!++;`.           .^:;,^,^`'''''''``'`''```^^^^,;}],,,^!,            .;i~fcZ\n1tjn(/uc}l'           `:^^{vfi^''''``````^,;Il!!IIIIl|Jr[i:`'            `!;;:;]\n&Ban[~i,^^.          '`^:I[+lI:^^``''''`,Ii<(Y00Y/-+<i~YmY~,`.           ..  . ,\n%%c]]_>;^'.         .`:!>_(x~!I,^`''''`,:l?Zo*#W@%Z(}?[[<>l^'.         '``^^^``:\nb%ou(1[-<l;,'      .',>-za8&/?+>l;^^^^^,:I-f[[1/zhBhCUoX_>;^'.      .':i-(/{-_{L\n}cM8abddmY)+>I`.   .':<]JB88h0r]_>I^,:,^,II;I!<-{tbB%%@q)]<l:`'..  .`I<|d8%o0ZW*\n+{Q%%%%%%B#C|+l`.   ',i?v%88%Bbv(_iI,^``^,^^^,I<[(Y88888J)?~>iI^.  .:l+{fd%%%Bk/\n~(Z%88888&aZc_!^'..'',i?rq&888%8oC)~i;,^``^^,:!+{jk%8888&mt-<i>!`'''^I+1fp%888z)\njZ&88888%kx)?~il^''`,l>_}/q%8888%BMc_i;,^^:Ii~]|nQ&888888%u]~i>!^`^,!~|zp8888%O/\nY8%888888#J/[_>ilI;I!i~?1fp%888888Mn}+illi+}fCboW8888888%of}+>iI,^;i<no8B88888&b\n{Y&88888888ku{?++++_(/(fcm&888888%ar)]_-?rqkW%%%888888888Wu1->ii!!ii<{/cd888888%\n}/d%8888888%&qXj//fC&&**W%888888888wx|(|jqB%8888%8M#&%888%kt[+>iiiiii<-1n*%88888\n]/k%88888888%B%M**M%%%%B%8888888888%*qZq*%8888%WwXnnzb%888Bb/-<iiiiiii~[t*%88888\n[0WMMMMMMMMMMMMWWWWWMWoh#MMWWWMMMMMMW&&&WMMMMWdj{]?]}r#MMMMWk/<iiiiiii>+xMMMMMM#\n", "                        .........''''''''''''''''........                       \n                              ..''''...'''''''....'.''.                         \n                           .....''''''''''''''''''''''.'..'''                   \n                         ..... ...''''''...'''''''.'':(/(i`.                    \n     ....               .......''''''''''''``'''''`^^;<lli:...              .,nq\n   .'...^.            ..''. .''''''..'''```^`^^^^,,:<?^^^^^;`.             'I>//\n;>~>l+j]'             .`,,i-l``'''''''`^^,:Ili<~<iii1Zv?I,^`.              ;,'  \nw*MQ?>I:`             '^^lc/~:^`'''```^^,I<?nObhdJ(_<_YU_,`.              ..    \nB%wt]i;^.            '`,I!>->lI:,^`'''`,;>}p$%oh*8Wt_<!!l:`'..        .`,;;lI:^'\n8BOt(}_<iI;,''.     .',l-zmMdu[<I,^''`^,;i?/x/}}{/LJ()t(<!;^''.      .^!-rLqpc_!\njC#WkpqqZY/-<I^.    .':<}w@%BWC[~I^^^`^^,;!I;Ii<_]}ZW*%h/]+il:'..   .`!~/q%BB&Ou\n>]r*B%%%BB8d/+!`..  .`:>?jW8%m/}+i;,^^```,:,,,:!+}vM%%8%oc{_>>l`.   ';i_}/d%88%L\nI_(w%8888&aow-!^.   '`:i?X%88WOz|_iI,^`````^^^:!_)U88888%%O[~>>I'.  '^I_1jh%8%of\ni[UM8888%Zj)}~I^'..'':!<?/Q&88%%MZf-i;,,^^^^,;!~[th%8888%hr]~i>I'''',I<[jq%888&C\n|d%88888%mf1-<i:```^;i><?1jh%888%%q(+!;,,:;i<-)rzZW88888%J)]<iI^``,li{uQ#B888888\n{z#8888888wx{-<iIIli<++]1fJW8888%aj1?~ii>_{fXZo&8%%%8888%L(]<iI,^,IiiUqCZ*888888\n[(J%888888%M0r)}]]}1YkCU0b&888888&Ox(}}{)Y#W%%%%%W*oM%88%oj{_>i!l!ii>+_}/J888888\n[|0%8888888%%WbZ0Owh%%B%%%88888888%#p0LLmW%888%M0vrjuQM%8%bj}_>>i>iiii<?)X888888\n)L&%888888888%%BBBB%8%&8%%888888888%%%%%%%888%*u1]--[)cW%8%*J(+>iiiii><?)q%88888\npMMMMMMMMMMMMMMMMMMMWZczCpMMMMMMMMMMMMMMMMMMWd/?+>ii<_|oMMMWWaj<iii-[i>_UWMMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...'''''''......''.                         \n                           .....''''''''''''''''''''''^!l'...                   \n                          .... ...''''''.'.'''```'''',l[[l,.                  'I\n       .                .......'''''''''``^,,:::,,,,^``''`,'.               .IfC\n'I>iii`..              .'. .'''''''.'''`,,Ii<]}}_<il;t[``'.,'               '^. \ncpw(_?I.              .``,?>^^`'''''''`,,l~}wM&&oz?<i{n?;^'.                    \n$&|_<;^'.             '`,i[>I;,^`''```^,:>~UBbQQd*w(<!l!i,''           .''^^^`. \no&Z/?<lI:,,`'        '^:!fqZ/+>I:^`'''`^:lit|___-[cd1+++>l;,`'..      ',~/vzx{<l\n_1jjrYXnf(]<i;'      '^;~1UBoJu/i:`''``^,,:I!lIIi<~)Ywpkr?_<l,'.     ',<nd%B%#L(\n',l~{nM%8WoQ{<:..    .`:i+|WC{]~i:`^``^````^,^^,:!+[/*@BWC)-~>I'.    ';>?|Z%8%%q\n.,i-fmW88%aC)<:'..   .`;<[w%8J(?<l;,^^``'``'`^^,;i?1c*888Boc-<>,'.  .`;<}/Z%8%q/\n,>{za%888qj}_i:`.   '':!+)Z888kQzt?i;,`````^`^,;i_(z#%888oJt_>l^'..',!_{rm888%L(\n?zb8%8888Qt{_>i,'..'`Ii>+[(088%%BMu_>;,^^^,:I!>_}/O8888%ox1?<i,`''^I<Job#B888%ax\n1Q%888888&pu}_<I,^^,;i>~-{/Y&888%J)]<I;;;;i+]|Upbo8%%88%*n1?<!^'`^:i_mzxzw8888%*\n{th%888888B*n1?+<><+[r|(jcO#88888Q/{-~<~-/uUm#%B@8*aoM%8%hf[_>;^^,l>><~])x*%8888\n1u#88888888%#ZzxffxJh%Mo#&%%88888Wwzf((|n*%%%%%*Qnt/tnQM8%kr}_<!l!iiii>_{r*%8888\nrk%888888888%%8W#M&B%%BB%888888888%8#kpd*8888%pj{?__?{|Q%8%#Qj]_<iiiii<?1z&88888\n#%88888%8888888%%%#QYUObM%%888888888%%%%%888%d/[+>ii~?10%88%B&Q{_~>i-<_[/b%88888\nWMMMMM#*WMMMMMMMMWp)}[[{tJaWMMWWMMMMMMMMMWMMMr?~iiii<(L*MMMMMWWmt}1XhJrvqWMMMMMM\n", "                        .........'''''''''''''''........                        \n                              ..''''...'''''''......''.                         \n                           .....'''''''''''''`^^^^``''`,,'.                    I\n                          .... ...''''`''``,;li~+<I;:`''.''                   ,i\n'Ii,'.                  ..... .'''''''''^:l<}Xpo*hO1i<+^'' '.                   \nchw)!,.               .''..''''''''.'''`,I~)h@%*#%8j+-f+:'.'.                   \n$$n<<I^`'..           .``l>^^,^`''''`'^,,!~/B&u||jO(<!;;I,'.                 .  \nZZU]+-<i~+i;,`.       '^,~cj[<;^^''```^`^;!>tr~~~<_[?-i!II,`.          ',l>-[>I^\nII!~_fwdh#bX]!^'     .'^;_nooc[1;,`'''''^^,::l>lI!i>[ZZYr_<!:`'.      ',~nwWWqc?\n  `;>]r&BWa#C<:'     .'^:li1]i>?I^`''```^^^^^II,^,I<-j8@8c}_<!,'     .`l+{nM%%Bk\n  `I<[xMMu({_I^'.     '^;i{mr+<l;,`^^```'''''```^^;i](k%8%dn}<!`.. ..`,l_)j*%%hY\n`:<]/Y*%Mx1->I^'.   ..`;i+UB%L|{-iI:,^`'```````^,;!_{fh%8kYf1<I`'''`:l}/jvw88Mx{\n~jJp#%%8%L([+>!,'   '^li<_}Y8%W*Zt~!:^``^^^,,;Il!<]|Uo8%d/}_>I^'''^I<n&%W8%8%#x1\n{ZB%%8888WOr}_<l^'''`I>i<-{/k%%m/1_>I,,,,,Ii<_(zLJJ*BB8%Z(}+>;`''':i}h0YCpW88%Z(\n{rM8888888%Wp/]<lI;I!~--[)jCM88av)]+ilIl!i-{jZ&$%odpbo&%WY{?~l^``^Ii_[~?1tZ%888w\n1uM888888888%pc/{}{(r0k00qa88888Wwx{]--?1JmbWBWwr){}{/uq%&mj[_!;,,l>ii>~[(Q%888%\nxb%8888888888%&*hh*W%B%%%%%888888%WqYnxuOB%%%kr{?~<<~?1fa%%Wbn]+ii>i!i>_}/b%8888\nW%8888888888888%Mbdko#&%%8888888888%8W#M8888%U1?<iii<-{j*%88BMz)[-+~()-}(Y888888\n888888%%8888888%qj/((/rzqW%8888888888%%%888%a/[+>>ii<?/q%8888%&qXrjZ%C(/u*%88888\n*MMMMMkkMMMMMMMM*/-~<<~-}t0WMMMMMMMMMMMMMMM&C?+>ii<{tUkWMMMMMMWWMo*&WMpmaWMMMMMM\n", "                        .........'''''''''''''''........                        \n                              ..''''...'''''''......''.                         \n                           .....'''''''''''''`^^^^``''`,,'.                    I\n                          .... ...''''`''``,;li~+<I;:`''.''                   ,i\n'Ii,'.                  ..... .'''''''''^:l<}Xpo*hO1i<+^'' '.                   \nchw)!,.               .''..''''''''.'''`,I~)h@%*#%8j+-f+:'.'.                   \n$$n<<I^`'..           .``l>^^,^`''''`'^,,!~/B&u||jO(<!;;I,'.                 .  \nZZU]+-<i~+i;,`.       '^,~cj[<;^^''```^`^;!>tr~~~<_[?-i!II,`.          ',l>-[>I^\nII!~_fwdh#bX]!^'     .'^;_nooc[1;,`'''''^^,::l>lI!i>[ZZYr_<!:`'.      ',~nwWWqc?\n  `;>]r&BWa#C<:'     .'^:li1]i>?I^`''```^^^^^II,^,I<-j8@8c}_<!,'     .`l+{nM%%Bk\n  `I<[xMMu({_I^'.     '^;i{mr+<l;,`^^```'''''```^^;i](k%8%dn}<!`.. ..`,l_)j*%%hY\n`:<]/Y*%Mx1->I^'.   ..`;i+UB%L|{-iI:,^`'```````^,;!_{fh%8kYf1<I`'''`:l}/jvw88Mx{\n~jJp#%%8%L([+>!,'   '^li<_}Y8%W*Zt~!:^``^^^,,;Il!<]|Uo8%d/}_>I^'''^I<n&%W8%8%#x1\n{ZB%%8888WOr}_<l^'''`I>i<-{/k%%m/1_>I,,,,,Ii<_(zLJJ*BB8%Z(}+>;`''':i}h0YCpW88%Z(\n{rM8888888%Wp/]<lI;I!~--[)jCM88av)]+ilIl!i-{jZ&$%odpbo&%WY{?~l^``^Ii_[~?1tZ%888w\n1uM888888888%pc/{}{(r0k00qa88888Wwx{]--?1JmbWBWwr){}{/uq%&mj[_!;,,l>ii>~[(Q%888%\nxb%8888888888%&*hh*W%B%%%%%888888%WqYnxuOB%%%kr{?~<<~?1fa%%Wbn]+ii>i!i>_}/b%8888\nW%8888888888888%Mbdko#&%%8888888888%8W#M8888%U1?<iii<-{j*%88BMz)[-+~()-}(Y888888\n888888%%8888888%qj/((/rzqW%8888888888%%%888%a/[+>>ii<?/q%8888%&qXrjZ%C(/u*%88888\n*MMMMMkkMMMMMMMM*/-~<<~-}t0WMMMMMMMMMMMMMMM&C?+>ii<{tUkWMMMMMMWWMo*&WMpmaWMMMMMM\n", "                        .........'''''''''''''''........                        \n                              ..''''...''''''.....'.''..                        \n                           .....''''''''''```^,^,^^`'''^`..                    '\n                          .... ...'''''''`,;l~[1{-i;,`''.'.                    .\nI}1!`                   ..... .''''''''`,;i-zh8%%MX~l<},'. ..                   \noaJ}I^                ....'.'''''''.'''^:l~J$bOZph|+i!-i,'.'.                   \nZ]l;,^```'''.          ''II,^^^`''''`'^,,IifUx[-_{Y(<l;I;:,^'.           .`,^`'.\n!!iii_{|xzx_;'.       .`^~Jmr_,`'''``'``^,;I>Y]ll!~-?ncnn)~>I,'.       .`itJwY)>\n.'`:i]chB@m)>,'      .'^:>f/-_><```'''''^^^,,I!:,:;!~(b@B#f?+>I`.      .:<[(C%WQ\n  .,I<?v%m[<I,'      .'^::--I;II,^`''````````^^``^,I~}n88%#Q/+>:.     .`;!<[/oB@\n `:i+}uoa(]~l,'.     .`,;?*c<<iiiI;,^`^``''''````^,l+{v8%8kY/+!,''''`^,I>_}jp%&h\n>}jYZh&%WX1]~iI`.   .',l>?YbjjJpaniI,^````^^,:::;;l<]|q%&Y)-<I^'''^Ii(QZLQqMB*v1\n|b%%%%8888L|]+>:.   ';i><_]C8&BdYf~l,^``^,:l>>>~-)jrXkB%m1[+l^`''`I>tMabb#B%%m(}\n{c&8888888%aX]>;`''`,!i<_}(U%%&X([_i;:,:Il>+-rU0bhq0Od#@m{?<I^'.'`lir/?[)j0&8Mz{\n1vW88888888Bb/]<!lli<}r/fuQ#888Mmx}-<>>><-{fL&@%U)]]][(JWY]+i:`'``;>i!>~?1th%%WO\n(Z8888888888&kCx/(/nCa%M#W%88888%WQj){{)UmbM%%hu[-~<<~-]U%pc]~l::;!iiii>_{th%88%\nZ&88888888888%%&*a#%@B%%%888888888%#d0Lm8B%%%dt}_>iii<?{c8B%c}?<><<><]_?{/088888\n%88888%%888888%mcnnvJwo&%88888888888%%%%8888%C([+>i><-1na%8%MJj({{1xw*utxO%88888\n8888qQm*%88888%p/1]--[(nZ&%88888888888888888Bp|]+<<_(cmW%888%%#kqwb8B%#da888888%\n#MMWL||jdWMMMMMWU-<ii><-}v#MMMMMMMMMMMMMMMMMMMZx||rQoWWWMMMMMMWW&&WWMMWWWWMMMMMa\n", "                        .........'''''''''''''''........                        \n                              .'''''...'''''''''.''.''                          \n                           .....'''''''`'``^,,,,,^^`''.''                       \n  '                       .... ...''''```^;I</XYn1i:^``....                     \n}Xj>,                   ..... .''''''''`,Ii/k8%B%z?i:,;^'.  .                   \n*{I,,'.                ......''''''.'''^:I<0Y|)|n1?>lI,:,^``''.                 \n1l;,^,:I++;^'         ..',:ii:^`'''``'^^^,;!!i!!!?OJ1+)(11->I,`.         .^:i{[I\n..'`I](ZWWx>,.        .`,<C0u]:^`''``'```^^^,]/,:;!~~]U#&8O{-<I`'        'i>_vop\n   ',i+n%Q-!:'.      .`^:l|<;l!:^^`'''''`^^^^;I``^,;i_{OB88dCf~I`.      .,I;i<f%\n  ',I>+/m}+i;`.     .'`,;uZ~!l;:::^`'`````````'``^^;!+{m%%%8#X~I`'...''`^;Ii~-Y%\n,l<](n0&q{]+>!:'.  ..'`IijU-_-tc{!I:^`````'``,:;:,;l<-/#%qzf}~l^```,I~1tj|})/C%%\n/Qph#8%%&Zf[_<i`.  ..`;i>~)0vq%8Z->I,^```^^,I!><{f/({(O@q1]~l,`''`:i|a&%BWbhMWLv\n|L%%%8888%ML}~I`.  .`li>+[1dBB*n(]~!;^^^,;Ii>_-[q8qQXLoBU-+l,`'..';>vctjnJbB%J1]\n{xM8888888%#/_!,''`,l<_?1tX*%8&mc)?~ilIIi<_rmqdhU(]_-?]jL_iI,`. .`:i>!>+?}/hBbf[\n)z&888888888L)+ilI!<]YbQOb&%&88%%Q([-++_?{jO%BBU]_<>>><>rJ[>;^''`^Iiiiii~]{J%%oQ\nxh%%888888888o0r(/xYk%%%%%88888888bJxttYdkM%8MY1?<iii><__wW|<!:,:!>>i+++?{|J%8%%\nM%Mh*&%%8888%oYntuOoW8%%8888888888%%MahW%%88%O(}+>ii>~?}joWt}]_~~_?{vhQ/fnL#8888\n8%LrnzQo%888%au(}?-}/cZ*%888888888888%%88888%q/{?_+-})xOM%%aCujjruOa%%8ah*888888\n&BY}11)jp%888Bo/]_<<~-{fZ888888888888888888888Or()/0aoWB%88%%&MWW&B%888%%%8888%B\n*Md(++_?jMMMMMWq|<iiii<-1hWMMMMMMMMMMMMMWWWMMWWopdoWWWWMMWWMMWWWWWMMMMMMMMMMMM*Q\n", "                        .........'''''''''''''''.........                       \n                              ..''''...''''''''''''''.                          \n                           .....'''''''''`^,,,::,,^`'....                       \n^I:`                      .... ...'''''``,;l}cQ0Y[I,`'`'...                     \nX>:,.                   ..... .''''''''',;ljbdqpu?i;,^:,''...                   \n['  .'.`^``'.          ..... .'''''.'''`,:!?<i!!![>;;::IllI:,`'             '`. \n'   `l[Xp0}I`.         .',I~-!^`'''``'`^`^^:II,,,:Iii-uJqp0t~i,'.         .;?nJu\n    `l?[zm_I^'        .',>()|)l^`''``'``''``!i``^``,I<{/nd$WY{<;`.       .I!!>1b\n    ^:Il1C<!;^.      .'^:!]!:II,^^`'''''`^```''''`^^,Ii_(h@&&q?!^'     ..`,,,:l<\n ',l<_1YMJ-+>iI'    .'`:;{p->!>~l:^''`````````^,^,:;li+/ZbC/1|~;`'''^,;i>ii<<_(Y\ni-1jXm*%BJ{?<>>,. ...';i>~{/{zhC?!:^^`````'^,Iii[{__-}JMj-~iI,^'''^;>|Oho0xnYwb*\n(d*W%%%88&J}~!;'.  .',i>~?}p#BZ{-<l:,^^``^,:;!<<C8bpb#$q-<I,`'...':i(w0QmhW%#n}]\n)L%888888Bm{~l^.   .`l><])vW%%az(?~ilI:,,;!<[1tJ0xfncYZx<l,`..  .':i+~<_]1uMb|[-\nfk%8888888#v]<;`'.'^;i[nzO#%88%&bX{_<>illi+?m&80]_+~<<>){I;,`.  .`,li!i<_]{LB*Y|\nL%%8888888%MLt-l:,:l<]LB%%888888BWc)]+<>~_[ta8Y[_<iiiii)b/>l:`''^;!<~f(-[)|L%%%M\n&&*#&%8&8888%aU}>i~1vp%88888888888MZvf//nYO#Bb1]+>iii<__U%/_~lII>_]1J%MzruU*%888\nWvtxcO#%88888J/}_~?tYZkW%8888888888%&*o*&%%%%w/{-~<<_])fwBwj({[}1fYk%8%&ao&88888\nM/[{1(nh%888%dt{-~>>~?)nw&88888888888%%%88888&Qj|)(cLObM%8%MdZOZd*%%8888%%8888%#\n%h/?]}1nM%888%pj]<ii><-{/b%888888888%%%888888%8hZma%BB%%888%%BBB%%888%%888888%hj\n#Wov-_?{dWMMMMW*Zn{~i>?|UoMMMMMMMMMWp0bMMMMMWWWW&&WMMMMMMMMMMMMMMMMW#daWMMMMWh|-\n", "                        .........'''''''''''''''.........                       \n                              ..''''...''''''''''''''.                          \n                           .....'''''''`'``^^^,;:,``'..                         \n~;^.                     ..... ....'''``'`,i{uUZ(lI^'.`'...                     \n|    .... ..            ..... .'''''''''^^I[)]-?!;;^``,,'`'`'..                 \n`   ',_UZX_^'          .....  ''`'''''''^^:;^^^^:I:,,:Ii]1}+l;,'.           '}v1\n    '>))|Z1:^.         .'^l}j{:`'''`````'`^I,^`````,ij|+nb8aC[i:`.        .`l)))\n    .^:Il+Y?;,'.      .':!>~_}>^`''``'``'`'`^```````,Il>+}d$$k{i:'.     .':I:^':\n  `:I!<_[Y*j<il`.    .'`;l{{I:;;,^`'''''``````````,,,:;i<(mUYwji,`...`,;l>~<>>>-\n`I<-}tYd#&j-+>>:.   .'^;l<X/jn1il:^''````^```^:l-{_i!l__>-_!!i!,`''^;>(XOhahpCZW\n+tYLpM%%%Wj?>I,.. ..'^!><__J$k(+il,^^``^```^,I><U$*0J0Y-l:,^''..''^I~Y*pJq8Mn//c\n{L@%%888%h|_l^.    .'I><_}/hBbt}_>!I;:,^^,:Ili_)zYvUqZ+I:^'.   .'':i<_]--]rq{-+I\njh%88888%oj-i,'    .^l<[/zb88%*wX(?<>i!I;l><jqav?+~>><>;,`'.   ..',l>><+_?-cw/]+\nh@%%88888%df?>;`..'`;i-CW&%888%%%MX]+ilIIl>~X$a]~<iiiii[I,^`'..'`;i_jZwj{)(u%&dO\n*bb*8%8888%*Zc[!,`^,!_f#%88888888Bbt{_>ii>+-Qw{_<iiii>>QZ_l;,``:i-(m%BBwzYOo88%B\n??{tXk%8888%#0j+!IIl<fp8%8888888888kJn/()/rC8v]?~>>>~_?uBx?-~>>_}tpB8888M&%%88%W\nii<-{tm%888%pf{-<>ii<[(nZW888888888%%W#oo#W%%hr({[[(fxvb%aYurt/rUk%8888888888%dr\n<!i~])x#%888%Z/}_~>ii<_{/YW88888888%%%%%%%888%*LzLk#&&&%8%%&W*oM8%8888888888%qt[\nbz|-]{(wB88888kU/]+>i>+[/C&%8888888opdo8%88888%8W%B%%%88888%%%%%888%%W&%888%#j}_\nMW#L)?[UWMMMMMWWoqLcnnuJdMMMMMMMMWkf|(|vw#MMWWMWWMMMMMMMMMMMMMMMMMMoCvcdWMMWm]+i\n", "                        ..... ...''''''''''''''''........                       \n                              .'''''...''''''....''''.                          \n                           .....'''''''''`''^:Il;^`''.                          \n;'                        .... ....'''`'''^i][rn-;:'''`''''.                    \n.      '^'              .......'''''''''``;i;,,^,:,``^,;!i!;,^''                \n     'ifcri`..         ....''.''''''''''``,^`'''^:^^,li{UpkX]iI,'           .I/f\n    .;lII!I^`.         .'^:+(?,`'''`````''^^'`''``'`:-?<-)p$oz-l,'        ',,:I+\n  .'^:::!)Yf!;`.      .',lIII!I^`''``'``''''`````''``^:I>+JW#8m_I`'   .''`,:,^` \n.^!<+_(cUx}_<>i`     .'^;li[)?iI,^`'''''```````,:++,,::I>>?]?}f_;`''`^I-/xj|)))/\n>?)rUq&&r-<I;l;.    .':!<~u&#0(>l,`''````^^^`^,li[1<i!<]<!,,,^`^'''^;]XOmaB%*qma\ntk*&%%%Mn}<;`'     ..,i<_]Q$Q{]~i;,^^``^```^,;Ii_QMbmmc)!;^'.    .':i|n-?{YMr[?+\nx&%88888ov?>:'.    ..,!+}/q%WZn)?<illI,^^,I!<-/Yj((tXU<I:^'.     .':!!l>+-?Oz]-<\nO%888888%8U}<I^.    `;>[Co888%&oqY{+>I;::Ii>[oWf+<>i!ii;,`'..  . .',I>]]?[}n&wzv\n%8&8%%8888&qv]!^'..`:i?nW%88888%%Bc}+l:,:;Ii-qf<<iiiiiii!,,^`'..',I>?0Wdtfnm%%%%\nnfrz0o%888%MQ/+I,``,I+f*B88888888%df}+ill!<~cQ~_<iii><<{Z-<>l,^,!~](QB%Wwqo8888&\n!>+?1jw8888Mn1->I;;Ii_upM%88888888%hUj1[[{/cWo/{[?-]}{)Y@J[]-<<_}tUk%888%%%88%%m\n!ii<?{j#%88%mt}_>>iii<_{xw8888888%%%BWhdph*88%hUvYwkkbh&8WwJzunzZ#%%88888888%#Y1\n)~<~?{/O%888%wf{-~<>><_}|xh%88888oOCQk8@B%%888%8W8%%%%%888%%8&&8%%88%8WW8888Mv1-\n%dJj{1|J%8888%*mzf){{{|rUd&888888z/)1(xO#%888888%888888888888%%8888%aQUQ&%8Bp(]~\n#W&#ZzYkWMMMMMWWW#ahkho#WWWMMMMMWY?_~~_[/ZWMMWWWMMMMMMMMMMMWMMMMMMWw/))j*MMWm]~i\n", "                        ..... ...''''''''''''''''........                       \n                              .'''''...''''''....''''.                          \n                           .....'''''''''`''^:Il;^`''.                          \n;'                        .... ....'''`'''^i][rn-;:'''`''''.                    \n.      '^'              .......'''''''''``;i;,,^,:,``^,;!i!;,^''                \n     'ifcri`..         ....''.''''''''''``,^`'''^:^^,li{UpkX]iI,'           .I/f\n    .;lII!I^`.         .'^:+(?,`'''`````''^^'`''``'`:-?<-)p$oz-l,'        ',,:I+\n  .'^:::!)Yf!;`.      .',lIII!I^`''``'``''''`````''``^:I>+JW#8m_I`'   .''`,:,^` \n.^!<+_(cUx}_<>i`     .'^;li[)?iI,^`'''''```````,:++,,::I>>?]?}f_;`''`^I-/xj|)))/\n>?)rUq&&r-<I;l;.    .':!<~u&#0(>l,`''````^^^`^,li[1<i!<]<!,,,^`^'''^;]XOmaB%*qma\ntk*&%%%Mn}<;`'     ..,i<_]Q$Q{]~i;,^^``^```^,;Ii_QMbmmc)!;^'.    .':i|n-?{YMr[?+\nx&%88888ov?>:'.    ..,!+}/q%WZn)?<illI,^^,I!<-/Yj((tXU<I:^'.     .':!!l>+-?Oz]-<\nO%888888%8U}<I^.    `;>[Co888%&oqY{+>I;::Ii>[oWf+<>i!ii;,`'..  . .',I>]]?[}n&wzv\n%8&8%%8888&qv]!^'..`:i?nW%88888%%Bc}+l:,:;Ii-qf<<iiiiiii!,,^`'..',I>?0Wdtfnm%%%%\nnfrz0o%888%MQ/+I,``,I+f*B88888888%df}+ill!<~cQ~_<iii><<{Z-<>l,^,!~](QB%Wwqo8888&\n!>+?1jw8888Mn1->I;;Ii_upM%88888888%hUj1[[{/cWo/{[?-]}{)Y@J[]-<<_}tUk%888%%%88%%m\n!ii<?{j#%88%mt}_>>iii<_{xw8888888%%%BWhdph*88%hUvYwkkbh&8WwJzunzZ#%%88888888%#Y1\n)~<~?{/O%888%wf{-~<>><_}|xh%88888oOCQk8@B%%888%8W8%%%%%888%%8&&8%%88%8WW8888Mv1-\n%dJj{1|J%8888%*mzf){{{|rUd&888888z/)1(xO#%888888%888888888888%%8888%aQUQ&%8Bp(]~\n#W&#ZzYkWMMMMMWWW#ahkho#WWWMMMMMWY?_~~_[/ZWMMWWWMMMMMMMMMMMWMMMMMMWw/))j*MMWm]~i\n", "                        ..... ...''''''''''''''''........                       \n                              .'''''...''''''.....'...                          \n                           .....''''''''''''```,:''''..'....                    \n.                        ..... ....'''`'''`,:,`:I'.'''`^^,,``'                  \n       ,l^              .......'''''''''``,^'''''^``^,l)CmQ|>I,`.               \n     'I?[>:`'.         ....`,'''''''''''``^`'''''``^,I>1jv0kz{i;^.           `-/\n   .`:;:;_|~:^..       .'`,l?l,`'''`````''^''`''``''^;I;Ii+X$8L_I,'    ...'',,^`\n.`I>~[{(n0Lj+iI'      .`:I;III;,^''``'``'''`````^:!I,^^,Ii>(xzZXi,'..'`I~}((]>I,\nI~}f0#&kn_I:;>;.     '^Ii_rwbC?l:^`'''''````^`^,;+x]I;::::,,,,;i;`''`I{xJhB%&QtX\nYQdW%%Wx}<I^`^.     .^I<voBbcc)>I,`'''``^^^^^,::!!{}~>>[{,``''.....'^+J}?1w8J|][\nMB%888&J|-i:'       .^I+(w@p|[-~!;,:,^```^^:II>}+?Y00wur{I^'     ..`lli<+-[Q(__>\np%88888&wu{~l,'.    .^l+)m%8aOXr)_<iI:,^^,;i-nbZ++<<_{>;,^'.      .'^,Ii~]]QoX/1\n*B%%%888%8oQ(<:'.   ':>]v%88%%%&MO[<I,,^,;li-ab(<>>iiii;^``'....  '^Ii(Jc/jOB%WM\nkZOwkW%888%WL]i,'..',i-/q%888888%Mj]>I,,,:Ii>n?<>iiiiiiillll:`'.'^I>?vW@WZbW888%\n++-}(nOW88Mc)]>:^``^I~taB888888888Zt?~!IIl>~fb)?-+~<~+__z/<<i:^,Ii?{j*%&8%%88880\nii><_[(C888Z|[~!I;Ili<{vw&%&8888%%B#Q/]_-[(xoBhzfjcUYzUdBw|{]+~_}(rUk8%%%8888BZ)\nlii>~])C%888U([+<>iii>+[|X*%8888kZCLqkqOOdoW%8%8a*%%%%%%88aw0CJ0h#W%B%*ko888&Q(]\nc[-?]1/X&8888qv|[-+~~_?{tud%88%qr(}]](Jb8B%88888%%88888888%%%%%%%88%MQuuvh%%C)]~\nBMhbJxvb%888%%8oqQJXXYCZb#8888%Z)[_<<~-{ua%88888888888888888888888%*v((((dB%X}_>\n#WWWWaaMMMMMMMWWWWWWW&&&&WMMMMM*u+>iii>+]j*MMMWWMMMMMMMMMMMMMMMMMMWz]?-?v*MWw-<i\n", "                        ..... ...''''''''''''''''........                       \n                              .'''''...''''''.....'...                          \n                           .....''''''''''''`'',:'''...'.''''.                  \n                          .... ....'''`'''`^^^`,,'.''''^I<<I^`'                 \n       .I!'             .... ..'''''''''``^`'''''`'''`;i+rm0u<:`'              .\n     .,^I_!^..          . ''^'''''''''''````''''''```^;::;!~[-i,`.           'I_\n  `:,:;l?vn~>:'        .'^::!;,`''''''``'''''`''```''``^,,;l?cJ|:`.  .'`,;!!I:^.\n`I~_vLXX|iII]~^.      '^,;l-}_I,`''`''`'''''````^,~t]:,,,:::;I>?l`'.'`;+xwhhOt?_\n>[tQB*f]!:^'.^..     ',I]xmaZY_I,^`'''''```^^`^,,;l>!I::{>'``''.....'l}jObW@*z/v\nwkM%%ox}~l,'        .`:>(0%X-_<l:,`''```^^^,,::!>i?Xf|)i_<^''.    ..`_t~_?/bf__>\nM%888%#0f?i;^.      .`:i_}hbn(]~i:,;:^```^^;!+rn+><?1u|!;:^'.      .^:,l<__Xu]-~\nCB8888%%WbU(>;^'    ',l~)Z&%8#hU[<I:,^^``^:!<wb~>>ii!!iI,^''.     ..`,I<]}1w8qLO\ncWW%%%888%8aY_I`.  '^l~{ZB888%Bm|]<I,```^,:II(Ui>iiiiiii;,:,`... .':i-xdbzU#%%B@\n?1tzm#%88WYf(-I^'''^l?cb%888888&pn]<!;,,^,;l!>f-~<<>><<<])i>I`'.',I<]JB%%W&88%MJ\ni>~?1rp%8&J([+I,^`^,i{Yq#%888888B8bv]>lIIIi~?n*c)(trnjjYo0-_l:,,Il<?(J88%8888#u{\niii~])c&88WQ|]~!I;Il><_{xp88888%MhkhO(?__[/cw&%WbbM88WW%Bou|[_++{xnXmW%W*M88%C1]\n_<+?{/J8888%Zt}-~<>>><_{/v#888WQn|}]{(xOkhM8%888%%8888888%Wb0JULh%8%B8wcvza%Mj[+\naZ0OYcQ&88888aQu/{[]]}(rUb&88%qf)?+>><-|08%8888888888888888%%%%%%88%#Xt///d@q{]~\n%BBB8#W888888%%8#hpqqdaM%%888%#v}+<ii><-{cW%8888888888888888888888%8Y(1{{Y%%o|?~\n#MMMMWWMMMMMMMMWWW&&&&WWWMMMMMW*Oj_iiii>_[OWMMWWMMMMMMMMMMMMMMMMMMM#n[][c*MMWn~>\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'...                          \n                           .....'''''''''''''''``''''..''''. ..                 \n                          .... ...'''''''''```'``'....'^I_{|/?,'.               \n      .'^:'             .......''''''''''``'`'''''''''`:;!>}jf+^'.              \n .'`^,,^[n+^.           ..'``'''''''''''````''''''`'.'`'''`^^;-[;..   .'''````''\n`I+f0Lz(_>;,I;         '`,:;;:,`''''''``'''''`''`^`!}],^``,,;</r]''''`:i]/XQx+l^\nI+zBkcx1I^. .,       .`,!+/LJ{I^`''`''`'''`'```^,,:i-]!::i;^^`.'^'''`,in&B$$%O[)\n}jqBJ{-!:`.          ',ltkWx}]>:,^`'''''``^^,`^l!!>vt{_!!v_'''..   .`![tuXZox{_}\n#&%8MQf]<I,`'       .',l>}J{<iiI,^``````^^,,:[J/>ii])jLji!I`'.     .`~_I>+-)]_+!\nW%888%#wJx{<I,'.   ..':l<?YhJz)~!:^:,``^^^,:iXn>iiii!!ii:^`'.      .`^,;i-?cZ1}r\nx&B%888%BB&dn~:`'..'`;i?umW%BBX[~l,^``^```^;lIliiiiiiiiiI:^'...   .^Ii-/XtjkB*oB\n?uQo%%88WpLYY1!^'''^l+)J8B888WY/]<!:^``'``^,,:!i>>>>>><<>+>l,''. ',l~th%%ho88B&q\n<+]/CM%%ax(]~>;^''^l{Uh%%88888&bCr}<I;,,^^,:Ii<r/[)txrtfUh{<I^'.',:l+{C%%B%8%br}\nii~])vM88dr{->:^^^,l-1|vp88888%B%Mawj<lI;I!>-)Y&bZ*&88M&@*|?i;,,lli+]/k8ob*%ot}_\n!>+](n#%8%#L|]~!I;I!i<?1fw%888o0vt)(j]+[1|xXOa%8%%%888888&Lt}?__{QZLO*huftrMQ]-<\njfxuvJW888%Bhn(]_~<<<_](rp%8%dr(]+>ii<?uk%%%%%8888888888888hmJzCkBB%@*f1{{)ah{-~\n8888WW888888%Wb0YurjjnXZa888%wt1?<iii><-(0&8888888888888888%%%8%%888Mc({}{xWBw}_\n%B%%%%8888888%%B%%&&&&%%%88888qn{_>!ii>~]1J%88888888888888888888888Bq|)}}fa%BZ[-\nUQdMMMMMMMMMMMMMMWWWWWWMMMMMMWW#d0X(>iii<?xMMMMWMMMMMMMMMMMMMMMMMMMMhr[)chWMWq}<\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'...                          \n                           .....''''''''''''''''''.......'``'                   \n                          .... ...''''''''''''''''  ..'`:!](j1:..               \n      . `,.             ..... .''''''''''`'``''''.''''''^^^:i[+,..              \n.`,<~l,`l}>^           ...'``'''''''''''````'''..'''`''''.'''',~l      .`,l+<;^'\nI]Lowu~I:'^`,:         .'`^II,^`''''''``'''''``'^^^^I?l,`''`'^^<?'    ',!th8o[>I\n_C$L{_i:`.   '        '`l]rJX(I^`''`''`'''`'``^^:;l_+!I;,li''..  .    'l~rCp#O[_\nmW%pt[~l:`'.         '`:~Cz~i>l,^^`'''''``^,,,I<ii<|Xz-::<1,'.        `<I!~]|kp/\n@%88hQcf1_i;,'.     .'`:I>-[~<il:^``````^^^^`[q)iii!i~~;,`^`'.       .'`,l<[}C@&\nYo%8%%8&#amu]I^'.  .'`:l<]cMkqj~!:^:,``^```^:_?!iiiiiiiiI:^'.       '`,I+]}/w&B%\n_j*%8888%*qQn+;'...`,l~|Ud8%Bw(?>I,`````'``^,,,I!i>i>>>>iiil,'.   .,I!<caaQbB&mv\n<}Z%%88&Qj{_<i:''.':>)zM@%88%aX/?>I:^`''```^,:Ii](?}{{}}/m|>I^'. '``:i-(0@B%%O(]\n>-1vb%8Wz([_i:``''`I<)xCo%888%8*pJj?l:,^^^^,Ii_thhqo*abh8W/_!,'.''',Ii_fhW*&%C{?\ni~?1fd%8#Oj[_>I,``^,!>-1rb%88%WbQXnt+I:,,:I>-|JM%%%%%%%%%Mn{<I,,li>~_1CkJjjU&Mj-\n-]{/r0%88%WQt}-<!IIl><-1fm%88oc|]+iiiiII!~)vw#%%888888888%ku)?__?tpkbWp|[}{|*8j-\nobbkbM88888%*Oct1[]][1tcw&88%Z/)?<iiiii><co8B%888888888888%WdJYJO*%%Bot{[[}tW#|]\nBBB%%8888888%%8Mhdwwqb*&%8888MQj{-~>i>i><]/vd%88888888888888%%8%%%88%0/({{(Z%%X[\nqk#%%8888888888%BBBBB%%%88888%%*qJcx}<ii>+])U%8888888%%%%8%%88888888%wj||xdB8Bd{\n+[|vpMMMMMMM#MMMpaWMMMMMMMMMMMMW&&WWhUf}--}nhWMMMMMMWaZJXzYqWMMMMMMMMMpOmoWMMM#x\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'...                          \n                           .....'''''''''''''''''''.. ...',```                  \n                          .... ...''''''..''''''''   .''^:i:;}{`.               \n         `              .......''''''''''`'``''''''''''.'. ''`_i.           .   \n.I|r]:. '`I,           ...''''''''''''''````''''''`''`^`...'''.:i.       .,!i~:`\nnpU{_I,^.    ^.        .'',<?!^`''''''``'''''```^,:l<I^:`''.  .`i^      ',!i{k?I\n8&f]<!:`'.            '`I)(rn|!^`''`''`'''`'`^`,Iii~(f/;,^,,.           I,:!-qb|\n%%*z|{]_>l,^`'       .`:i(-IIlI:,^`'''''``^^,,<>iiii!i]!^',I'.          '`;i+Y$&\nh8B8adbkdmY{!,'     .'^:l!<)001i;,`'`````^^^`;u-iiiiiiil:,^`'..       .'^;i+f#8M\n}nb8%%%B@&kQ1l`..  '`:l>_{u*BZt+l,`^^`^^'```^;I:;liii>>>il!l,.      '^,I]((YoCt{\n!_/Z%88M0j[_~i^'..'`;~/mbo8%#j{+i;,^````'```^,:I!<_()]??}Y(>i^'. .''^,I>(QM%b)]+\n:~)q%8&X|}_<I,`.  .,i?YdWB888qvf1+l:^`''```^,:l<[zkW*OLmM8j~!,`' .  .`:i_j%%Bu?_\n!_1QW88Zt}-<I,`'..',;>-{nb%88BWhwY)iI,^^^^,;l<?tm%%8%%%%%o/?i,'.''''^:;i_/nx0hf-\n<?)tC88%a0x[_<i:```^;i+}|U88%hv(]+~>!,,,,:l<1Uq#%888888888J1+l:,Ii<?]{xn-+_]{k%O\nJJZmd&88%BW0n(}-~>i<+?{/za%88U|}+>iiiI:,Ii?xh@B8888888888%WJ|]__-}v*M8L}_+_]{d@*\nBB%%%888888%&odOJzccXCZhW%88%qx(]+<>i>i!i<vLJO#%8888888888%8kLUXUp&%%a|}]?]}n&%J\nMW&%%8888888%%%%B%%%%%%%88888%omYnft(-~~<<+-{tZ%888888%%%8&%B%%88%88%hr|)1(X#%#t\n{(rXmM%8888WM888W&%88888888888%%%8&8&pv{_++-{jb%888%%&awCzzUk%88888888qcncw%%88Q\n!><_}tdWMMW#*MWquXaWMMMMMMMMMMMMWWWWWWWbJvuzZhMMMMWhJr)[??]}/dMMMMMMMWW#o#WMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'...                          \n                           .....'''''''''''''''''''.. ...',```                  \n                          .... ...''''''..''''''''   .''^:i:;}{`.               \n         `              .......''''''''''`'``''''''''''.'. ''`_i.           .   \n.I|r]:. '`I,           ...''''''''''''''````''''''`''`^`...'''.:i.       .,!i~:`\nnpU{_I,^.    ^.        .'',<?!^`''''''``'''''```^,:l<I^:`''.  .`i^      ',!i{k?I\n8&f]<!:`'.            '`I)(rn|!^`''`''`'''`'`^`,Iii~(f/;,^,,.           I,:!-qb|\n%%*z|{]_>l,^`'       .`:i(-IIlI:,^`'''''``^^,,<>iiii!i]!^',I'.          '`;i+Y$&\nh8B8adbkdmY{!,'     .'^:l!<)001i;,`'`````^^^`;u-iiiiiiil:,^`'..       .'^;i+f#8M\n}nb8%%%B@&kQ1l`..  '`:l>_{u*BZt+l,`^^`^^'```^;I:;liii>>>il!l,.      '^,I]((YoCt{\n!_/Z%88M0j[_~i^'..'`;~/mbo8%#j{+i;,^````'```^,:I!<_()]??}Y(>i^'. .''^,I>(QM%b)]+\n:~)q%8&X|}_<I,`.  .,i?YdWB888qvf1+l:^`''```^,:l<[zkW*OLmM8j~!,`' .  .`:i_j%%Bu?_\n!_1QW88Zt}-<I,`'..',;>-{nb%88BWhwY)iI,^^^^,;l<?tm%%8%%%%%o/?i,'.''''^:;i_/nx0hf-\n<?)tC88%a0x[_<i:```^;i+}|U88%hv(]+~>!,,,,:l<1Uq#%888888888J1+l:,Ii<?]{xn-+_]{k%O\nJJZmd&88%BW0n(}-~>i<+?{/za%88U|}+>iiiI:,Ii?xh@B8888888888%WJ|]__-}v*M8L}_+_]{d@*\nBB%%%888888%&odOJzccXCZhW%88%qx(]+<>i>i!i<vLJO#%8888888888%8kLUXUp&%%a|}]?]}n&%J\nMW&%%8888888%%%%B%%%%%%%88888%omYnft(-~~<<+-{tZ%888888%%%8&%B%%88%88%hr|)1(X#%#t\n{(rXmM%8888WM888W&%88888888888%%%8&8&pv{_++-{jb%888%%&awCzzUk%88888888qcncw%%88Q\n!><_}tdWMMW#*MWquXaWMMMMMMMMMMMMWWWWWWWbJvuzZhMMMMWhJr)[??]}/dMMMMMMMWW#o#WMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'...                          \n                           .....'''''''''''''''''''..  ..'``''                  \n                          .... ....'''''..'.''''''    .'.`,^^!]^                \n  .'.    .              .......''''''''''`'``'''''''''''.. .'';I.          `,;^'\n:1v|i'   '^`           ......'''''''''''````''''``^,``'^`..... .^'        `i_Cw?\nqx_l:^`'     `         .'`;_[i^`''''''``'''''`^`,I!~/1+I,`'.    ,,      ^:,::!(_\n%c_<!l;:^''.          .'I-[|{_;``''`'``'''''`^^;i>><]}/+;^`,`           '''`:;+x\n%%wufffjj(+I,'.      .',IllIII;,^^`'''''```^^`,<>!iii!!iI,``^'.         .^,li-w$\nxuq8&W&%B&d/i,'     '`,;l>_vdJ+I,^''``````````,-I,;iiii>ilil:^'.     ':i+_-1cbZn\nl_10%8%oUj/|<,. . .',l<}jcmBmf?i:^`^``^^'''''```,;I>~]??}Chc<;'     ';l_tO#&Wx-~\n:<[Y888Y([+iI,'....`l+no%%%%J([~l:,^^`````````^:Ii_tq*ZUb$Z}>:`.     .`;>1cab[_+\n;+)d%8%0(}+i:`'.   'I~(jZ888WdZQc/~I,``'``^^,,;i_)caB%%%%&x->:`.     '`,;>~]nmx]\n<?)n#88&L/]_>!:'..'`,!_}tb%88%dc/{+il,^^`^,;!<?(Xh%%88888&u]<;`'',^,,,,:!>~_-0Bh\n[)jz*%88%oZj]+>:^^,;l<-1tb%8%Z|[+iii;^,^,:!~1Jpo8%8888888%w/-i;::!<~][{]<<+?[OB%\naaoM&8888%Bou)]_<><+-}(nZ&88&z([~iii!;,,;i~/k@B%8888888888%hn[_~_](C#&d(]?]{jM%*\n@@B%8888888%WbLuftzC0qhM%888%px)]_<iiiiii><xYz0M%88888%%&W&B&OUzXO*%%%ax///nh%%w\nXCqo8%8888MM8%B%MM%B%%%888888%*wJcux/-+<>><+](no%888%WpJvxnzw8%88%%888%a0QmM%8%w\n>_}/Xo%88%hmW%#wOqW%8%88888888%B%%%%8m|?+<~_{jm%88%8mx1]__-]1zW%8888888%%%%%88%M\nii>+]j#MMMM*MMc1)(xh#aWMMWWWMMMMMWWWW&hZCzcXm*WMMWon}_<iiii<_]CWMMMMMMMMWWMMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'...                          \n                           .....'''''''''''''''''''..  ...''''.                 \n                          .... ...''''''..'.''''''.....'.''.',;'                \n ,,'                    .......''''''''''`'``'''''```'''''....'`           .+Xn?\n)n?I^ .   ..           ...  .'''''''''''````''''``:IllII;`''.            .``~]i>\nu;^^`'`...   .         .'^>{~:^'''''''``'''''```,li>xz)~>I^'.    ^       ,,'. .`\np]ll!i><<I,`.         .`;l><I;,`'''`'``'''''```^l>ii+_~<iI`^,`           .`^,^`<\nkLnucCpo*O1i,'.     .'`,;Il!>l:,```'''.'`````''`l!:;!i><~1(iI,'.     .^<}-i~?(Ja\ni+)Y&BBMqwZ(I^'    .':li_|zmp/i:,`'''''``````'''^,:I>+?]u%%C_l^.     `![j0bhMZt{\n^i?t#%&X|[-?i^.   .`;<}JbW@or}+!;,`^``^^'''''```,;!~|Q0mMBpj?l`.   . '^,l{bCU)~<\n,i{p%88Z|}+l,`.. .'^!~xhW%8*Cvr/]>I,^`````````^,I<]zWB%%8%Q]>;`.      .',i<<<-]?\ni-)CW88%J)]~iI^.  .':i-{no%8%%%aJt~!,``'```^,,I>-{Y%%88888u]>;`.  .''.''^:!>~1h*\n~[|no%88W0r{_<l`''`:li_{/q%88aY(-<>!:^^^^^,I!<?)jYk%8888%%z?<I^'.^!i!;:;I!>~-1*B\ncYZo88888%&d/?i:,^I>>~])n*88Wv)]<iiI^^^^,;!~{UwaM8%88%%#oMou?i;:,I><+]-+<~_])q%8\nBB%88888888%J{?~ii<_[|cQo%8%Mn)]~iiil;::l!<}d%8%%88&%*CnttC8p}~~+?{jqM*n{1(/ZB8#\nqh&%8888888%&Oj{[}(mh#8%%8888du([-~>>iiiiii{ujc0W88%*n)[-__/qdLucLdWB%%hLUJp88%d\n-1uq8%888kZk%B*LcUhB%%8888888%Md0CCY/-+<ii><-1tL&88Wv{-<>i>~-/q%8%88888%8&8%888W\n>~])zM%8%hZk%QjttxJaB%%8888888%%BBBB8U[_<><_[fZ8%%%Y}-<iiii>~]|h%88888888888888%\nii>+?JWMMMMW*/-+++_)XcqWMMWWMMMMMMMMWM0JXuvUmoWMMWC]_>iiiiiii~?JWMMMMMMMMMMMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'...                          \n                           .....'''''''''''''''''''..........''                 \n                          .... ...''''''..'.''''''.''''`'''. `:'                \n Il'                    .......''''''''''`'``''''``,;i~<l;^`'...             lft\nl+i^.      .           ......'''''''''''````''''`^;<-Yk#O_!,`.           ''  `'`\n!` ''`''''.            .'`!-!,`'''''''``'''''````Ii~_<{Ua[!:^'   .       ..     \njl:I!+(x/~;^'         .^;:II:,`''''`'``'''''`````I:^,Ii<+iI;,`.         `!l^,,^_\nj+~1UhWhdC?;'       .'^:I!<?+l,^```'''''`````'''''`^:!<~]0j<!,'.      .:!tu]?{zW\n';>]n%a)]-<I'      .`;>{xJbb(<!:^`'''````````''''^,:l~]{p@h/~I`.      .``^!_)h$b\n`I<}J%w{]<;^'     .':>/qM@@0{]<l;,^^```^'`'''```,;l~{nUbBO)?i,'.        .`!<<nd-\nl+{0%%*u1?<l:^.   .',l~}jb%WZYXu}>i;^```````^^,;!~(mW8%%%0(_!,'.  .''''''^:i>+u<\n+[(Q%8%WQj}_<i,'.  .^I<[(0%8%@Wc{<il^`''`^^,,Ii<_{ja%88888U->;^'.'Iiiil:;;;!<<Y{\n|xQ*8888%Wbx]~l`''`:!>_{zM888wj]+i;,^^^`^^:I!<?)jvUo%8%%%@a|+!,`'^I>_YZu]__-?{ah\nW&%8888888B#/?i,,,:i~-1fp%8%bt{_>il;:,^^,;i<}Oh#WW&88%#wLCwkx>I^^,I+[uB@m///jd%%\nM%%888888%%&x[+i!i~{fXOa&88%df)?~>iii!ll!!i</*#&%888%qr([-+{C?!Ili_{tZ88&wOm*%88\n(zp&%88&*bo%z]_+_?n*&%%%8888&Ocj/({-<>>iiii<-1fck%8%b/}_<>i!<+<?](uJk%888%%%%88&\n~])XM%8MUurhZ?_+-[m$8%8888888%W##MWw{-+>iii>~])rk%8Wn{->iiiii>-vk*8%%88888888888\ni<?{Y%%8qczov_~<~?)Z%##8888888%%%%%%hx?~>ii<_}rd%8Bq1?<>iiiii<?(*B88888888888888\nii<_1aMMW*M#(<iii><-f/fbWMMMWMMMMMMM&ht1tnucCw*WMMWu-~iiiiiii>+}dWMMMMMMMMMMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'....                         \n                           .....''''''''''''''''''''''''''''..'                 \n                          .... ...''''''..'.''''''''^:I_}+I:^`^'                \n `'                     . ..  .''''''''''`'``'''''``;ljkW&L+I^'.              ',\n,`                     ..  ...''''''''''````'''''`,_i!--|hm}l^'.                \nl..'`,Il,`'            .'`,,```'''.'''``'''''`''``I>::;li+!l:`.           `^''. \ni,,l_Xbpc<,.         .'^::;:;,`''''`''`''''''``'''''^:li?<lI,`'         'l/J/I;/\nI:;>z8n}}~!`        ',;!?(jt~!,^```'''''`````'''.'`^:I<_dk(<>l'.        `,:i??nW\n.`I>~UX~i;,`.      .`I_QM%%v-<l:,`'''```````'''`^^:Ii+-JBZv-i;'.         .`l<(WB\n;i_1nwu?+iI,`     .'`l_/cb%C(]~>!I:^``^^'`''`^:I>}{{)jXMa{->;`'..  ...  .'`;<_qW\n~?(hB%qx([+<!:'.  .'`;>?tw%8kZmx_>>;^`''````,:l?XkM#oM%%at}<I^'...':Ii>l;;::i>vx\n}tz*%8%W*d/?~>:'.  .^!_1qB88%$O}+!l:``''``^,:Ii_}(ca%88%%kC)<I^`'':i{Ckwr?___<t]\na#&88888%Baf]~I`'''^l+[(J%88*L(?<l,^``^^^,;I!~}/jnuw%%&hpbMb1il,``,l_[vW%dr|(/wY\n%B%8888888@d{_I,^,:!_{tYo88%J([+>i!llI:,,I!>_0W8W#*&%bc/{]]{)<>l^,:!-{/a%%aqdM%%\numM%8&8%&W8b[+ill>+)Qbo8%88%Ct1]+<>>>>iiiIl>+jbh&%8%oj{-<>iii>!;:Ii_{jw888%%%888\n-{na%8aLzrtf~>ii<-r*B%%88888oLJ0Zqn_+>iiiiii<-{t0%8%Q1?<iiiiiii!>+{fC*%888888888\n<-}nWBZ/)]~>iiii<-u%%%8%8888888%BB*x}-<iiiii>_}(0%88c}_>iiiiii>~/QbM%%8888888888\ni<?1bBWc((v_>ii>>~-v#QYw8888888888%&Z)_<i!!i<-1U&%%Wj[+>iiiiii<?/WB%888888888888\nii~?ZWW*ph&niiiiiii<]]}j*MMMMMMMMMMW8U_~]||tcJqMMMM*|+>iiiiiii>+j#MMMMMMMMMMMMMM\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'....                         \n                           .....'''''''''''''''''''''''''''''..                 \n                          .... ....'''''..'.''''''''`,<}||-I,``.                \n `'                     . ..  .''''''''''`'``'''''``:itfxk%Q<:`'                \n.   ..                 .. ...'''''''''''````''''''^+l;:I!]Un<,`.                \n. .^!}|1<,`.          ..'`^^^^`'''.'''``'''''``'`'',^,;i<>lI;^'            .!}]`\nI.^I{aMwC?:'         '`,:I-)<:``'''`''`''''''``''''`,;i1bZt~l:`.           ^i}j}\n,'^;l/)>il,'.       ',I-fLhX-I,^```'''''`````''''`,:I>_)aLJn>!^'           '',;j\n':!><?+<i;^'.      .`;~LoMriil;;:,`''```````''`^,l_1(1)qc_<>l,'.          .',i<d\n!~-1uam/[_>l:`.   .'`:i<-}t}++<iii;^^``^'`'''`^,!?Ua8aaBY[+!:`'.....`^,,^^^,:i>Q\n_}YM%%%MbL(-~!^.  .'`:i_}n*owU}>iil^^`''```^,,,;!~]|Z%%%dnj[i;^.''':i|UCj]<<~<1f\nnCM%8888%Bh(-<;'. .`I<]xa8%%p(_<I,^```'`^,:II!i>~-}(foB&awqqj>i:`'`:l](J&ou|(/bz\n%%88888%%BM/-!^'''^I+[/U88%kt{_>!;,^,,,,,Ii+cdhd0zxxQ%pj)]_-[>>i^''`;<]{0@&kkM%M\no%%888MwQZo|~!,^^:!-rOa&88%kj)]+>i!!iiilIIl<fUJQbW&MBb(]_<>ii>!,^^,;i?1fb%8%%8&8\n(Y*%8Mz/1?[+>iill<]U8%%88888Zuj/tf)+<>>iI;Iii>+](vM%Wr[_>iiiiiI:;l>-1jUk88888888\n-{raBhf(}-_<ii>><_{hB%%%88888Mo*&%&u]+>iiiiii>+]1uM%h([+iiiiiiii+|XZkM%%88888888\n+[)ZB&Ourch(~>>>>~-XWkda&88888%%88%aj}_>iii><_](zo%%b(]~iiiiii>~]U%B%88888888888\n_[cM%%%&W%Bc-+>>>i<+{{|j0%888888888%ov[_~<~-1rJk%%8%*/[~iiiiiii~]tM%8888888888%8\n~n*WMMMWMMWoj~iiiiiii>_{mWMMMWWWWMMM&b[_~vmpaM&WMMMMWC-<iiiiiii>_1dWMMMMMMMMMLOM\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''.....'....                         \n                           .....'''''''''''''''''''''''''''''..                 \n                          .... ....'''''..'.''''''''`,<}||-I,``.                \n `'                     . ..  .''''''''''`'``'''''``:itfxk%Q<:`'                \n.   ..                 .. ...'''''''''''````''''''^+l;:I!]Un<,`.                \n. .^!}|1<,`.          ..'`^^^^`'''.'''``'''''``'`'',^,;i<>lI;^'            .!}]`\nI.^I{aMwC?:'         '`,:I-)<:``'''`''`''''''``''''`,;i1bZt~l:`.           ^i}j}\n,'^;l/)>il,'.       ',I-fLhX-I,^```'''''`````''''`,:I>_)aLJn>!^'           '',;j\n':!><?+<i;^'.      .`;~LoMriil;;:,`''```````''`^,l_1(1)qc_<>l,'.          .',i<d\n!~-1uam/[_>l:`.   .'`:i<-}t}++<iii;^^``^'`'''`^,!?Ua8aaBY[+!:`'.....`^,,^^^,:i>Q\n_}YM%%%MbL(-~!^.  .'`:i_}n*owU}>iil^^`''```^,,,;!~]|Z%%%dnj[i;^.''':i|UCj]<<~<1f\nnCM%8888%Bh(-<;'. .`I<]xa8%%p(_<I,^```'`^,:II!i>~-}(foB&awqqj>i:`'`:l](J&ou|(/bz\n%%88888%%BM/-!^'''^I+[/U88%kt{_>!;,^,,,,,Ii+cdhd0zxxQ%pj)]_-[>>i^''`;<]{0@&kkM%M\no%%888MwQZo|~!,^^:!-rOa&88%kj)]+>i!!iiilIIl<fUJQbW&MBb(]_<>ii>!,^^,;i?1fb%8%%8&8\n(Y*%8Mz/1?[+>iill<]U8%%88888Zuj/tf)+<>>iI;Iii>+](vM%Wr[_>iiiiiI:;l>-1jUk88888888\n-{raBhf(}-_<ii>><_{hB%%%88888Mo*&%&u]+>iiiiii>+]1uM%h([+iiiiiiii+|XZkM%%88888888\n+[)ZB&Ourch(~>>>>~-XWkda&88888%%88%aj}_>iii><_](zo%%b(]~iiiiii>~]U%B%88888888888\n_[cM%%%&W%Bc-+>>>i<+{{|j0%888888888%ov[_~<~-1rJk%%8%*/[~iiiiiii~]tM%8888888888%8\n~n*WMMMWMMWoj~iiiiiii>_{mWMMMWWWWMMM&b[_~vmpaM&WMMMMWC-<iiiiiii>_1dWMMMMMMMMMLOM\n", "                        .........''''''''''''''''........                       \n                              ..''''...''''''........'.                         \n                           .....''''''''''''''''''''''.`^`'''..                 \n                          .... ....'''''..'.''''''''`+j?+jz)!,`.                \n '                      ....  .''''''''''`'``'''''`^I+_!>?z&XI^'                \n   .,II:`'.            .'...''''''''''''````'''.''`,;,,;I!<]+:^.              `;\n  ',+QaquI`.         .'`^^l!,^`'''.'''``'''''`''``'^,;</Xc-l;,'.            .;!?\n'.,:I-n{{i^.        .`,:>zwn>,`''''`''`''''''``''`^:I>tWMbLvj!^'             .`<\n `I!iil;^,`.       .`:<U*h]iI,^^```'''''`````'''`,l<}/UQ)[-?(i^'             `!_\n^!i<<~~<iI;,'.     .`,<vx1>l;:III,`''````````''`,l+vk8@m)]<!:,`'    .'.``^''`^li\n<-nrvZq0n}_<i:.   ..'^:;Ii<i>~>>>i,````^`````^^^:l<?|qB8OXu{iI,'''.`:+cUn]>>>i+~\n}nW88B%B%an?~i^. ..'^I>+?1jUC)>iI:,`````^,::::::;I!~?1QB%b0mY+i;''',!}nuCw0cjnbY\nbW888%88%$0]~I^. .':<?fwhM%#f+>!:,^````^:Ii|JQYf?<<<~+[Xt?~+1?ii^''`^:i_[x&%&%%&\nB%88&qYvcpY~i,`''`;<}v*B%%Mn1]~>!I;;IllI;li)nuQQzr/(/f?<>>>i!iiI`'''^;~[(Y&88888\nqW%%qt)[__{iiI,`^:i]c8%&88MCx|{]?][~<>i;:::;li><_[C%%Z-~iiiiii:^^,;I>_}/Y#%88888\n}rkBZ({]-~>i>>ilIi_)h%888888odmOmoW0}_>I:;Iliii<-[tMBC?+>iiiiiI;l~1ncY0h8%888888\n-}jMWQvrxQmC{<>>><_{aBW&8888%%%%%%%BU}-<iiiii><_[)vM%z[_>iiiii>>+(oB%%%%88888%%8\n?)vM%%&#W%BWt]~>ii>~turcL*888888888%#r}_<><<_{/xYq&%8c{?<iiiiii<-)w%888888888*o8\nCZ#%88%%%8%#f]_>iiiii<-1|q%888888888%aj]__[vq#W8%B%8%h/?~iiiiii>_[cB88888888Zn/Q\nWW#MMMMMMMMWbf~iiiiiii>-X#WWWWMMMMMMM#f-__(M&WWMMMMMMWbt<iiiiiii>+{QMMMMMMM#x[_z\n"];
+
+// Inverted version for example 2
+const EXAMPLE_FRAMES_INV = EXAMPLE_FRAMES.map(f => {
+  const chars = " .'`^,:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+  const inv = chars.split("").reverse().join("");
+  // rebuild frame replacing chars
+  const activeOrig = chars;
+  const activeInv = inv;
+  return f.split("").map(ch => {
+    const idx = activeOrig.indexOf(ch);
+    return idx >= 0 ? activeInv[idx] : ch;
+  }).join("");
+});
+
+// High-threshold version (lum=60 means more spaces)
+const EXAMPLE_FRAMES_HI = EXAMPLE_FRAMES.map(f =>
+  f.split("").map(ch => (" .'`".includes(ch) ? " " : ch)).join("")
+);
+
+// ── State ──
+let userFrames = [];
+let currentFrameIndex = 0;
+let isPlaying = true;
+let playInterval = null;
+let currentColor = "green";
+let isProcessing = false;
+let cancelProcessing = false;
+
+// ── Example Animations ──
+let ex1Frame = 0, ex2Frame = 0, ex3Frame = 0;
+
+function startExampleAnimations() {
+  setInterval(() => {
+    ex1Frame = (ex1Frame + 1) % EXAMPLE_FRAMES.length;
+    document.getElementById("ex1").textContent = EXAMPLE_FRAMES[ex1Frame];
+  }, 120);
+
+  setInterval(() => {
+    ex2Frame = (ex2Frame + 1) % EXAMPLE_FRAMES.length;
+    document.getElementById("ex2").textContent = EXAMPLE_FRAMES_INV[ex2Frame];
+  }, 140);
+
+  setInterval(() => {
+    ex3Frame = (ex3Frame + 1) % EXAMPLE_FRAMES.length;
+    document.getElementById("ex3").textContent = EXAMPLE_FRAMES_HI[ex3Frame];
+  }, 100);
+}
+
+// ── Hero background ──
+function startHeroBg() {
+  let f = 0;
+  const el = document.getElementById("heroBgAscii");
+  if (!el) return;
+  setInterval(() => {
+    f = (f + 1) % EXAMPLE_FRAMES.length;
+    el.textContent = EXAMPLE_FRAMES[f];
+  }, 80);
+}
+
+// ── Pixel → ASCII ──
+function pixelsToAscii(data, width, height, lumThreshold, chars, invert) {
+  let activeChars = chars;
+  if (invert) activeChars = activeChars.split("").reverse().join("");
+
+  const lumRange = Math.max(1, 255 - lumThreshold);
+  let frame = "";
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+      if (lum < lumThreshold) {
+        frame += " ";
+        continue;
+      }
+
+      const charIndex = Math.floor(
+        ((lum - lumThreshold) * (activeChars.length - 1)) / lumRange
+      );
+      frame += activeChars[Math.max(0, Math.min(charIndex, activeChars.length - 1))] || " ";
+    }
+    if (y < height - 1) frame += "\n";
+  }
+  return frame;
+}
+
+// ── Video Processing ──
+async function processVideo(file) {
+  const { cols: columns, lum: lumThr } = DETAIL_PRESETS[activeDetail];
+  const fps     = SPEED_PRESETS[activeSpeed].fps;
+  const charset = CHARSET_MAP[activeStyle] || CHARSET_MAP.standard;
+  const invert  = activeInvert;
+
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    video.src = URL.createObjectURL(file);
+
+    video.addEventListener("error", () => reject(new Error("Failed to load video")));
+
+    video.addEventListener("loadedmetadata", async () => {
+      const duration  = video.duration;
+      const vw        = video.videoWidth;
+      const vh        = video.videoHeight;
+      const outH      = Math.max(1, Math.round(vh * (columns / vw) * FONT_RATIO));
+
+      const canvas    = document.createElement("canvas");
+      canvas.width    = columns;
+      canvas.height   = outH;
+      const ctx       = canvas.getContext("2d", { willReadFrequently: true });
+
+      const totalFrames = Math.max(1, Math.floor(duration * fps));
+      const frames      = [];
+
+      setProgress(0, `Processing frame 0 / ${totalFrames}`);
+
+      for (let fi = 0; fi < totalFrames; fi++) {
+        if (cancelProcessing) { resolve([]); return; }
+
+        const time = fi / fps;
+        await seekTo(video, Math.min(time, duration - 0.001));
+
+        ctx.drawImage(video, 0, 0, columns, outH);
+        const imageData = ctx.getImageData(0, 0, columns, outH);
+        const ascii = pixelsToAscii(imageData.data, columns, outH, lumThr, charset, invert);
+        frames.push(ascii);
+
+        const pct = Math.round(((fi + 1) / totalFrames) * 100);
+        setProgress(pct, `Processing frame ${fi + 1} / ${totalFrames}`);
+      }
+
+      URL.revokeObjectURL(video.src);
+      resolve(frames);
+    });
+  });
+}
+
+function seekTo(video, time) {
+  return new Promise(res => {
+    const onSeeked = () => { video.removeEventListener("seeked", onSeeked); res(); };
+    video.addEventListener("seeked", onSeeked);
+    video.currentTime = time;
+  });
+}
+
+// ── Progress UI ──
+function setProgress(pct, text) {
+  document.getElementById("progressFill").style.width = pct + "%";
+  document.getElementById("progressText").textContent = text;
+}
+
+// ── Color map for export canvas ──
+const COLOR_HEX = { green: "#00ff41", blue: "#79A4FF", pink: "#ff006e", white: "#e0e0e0" };
+
+// ── Toast ──
+let toastTimer = null;
+function showToast(msg, type = "success") {
+  const t = document.getElementById("toast");
+  const icons = { success: "✓", error: "✗", info: "◈" };
+  document.getElementById("toastIcon").textContent = icons[type] || "●";
+  document.getElementById("toastMsg").textContent = msg;
+  t.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove("show"); }, 3000);
+}
+
+// ── Playback ──
+function setFrames(frames) {
+  userFrames = frames;
+  currentFrameIndex = 0;
+  showFrame(0);
+  startPlayback();
+
+  document.getElementById("placeholder").style.display = "none";
+  document.getElementById("asciiOutput").style.display = "";
+  document.getElementById("outputStatus").classList.add("visible");
+  document.getElementById("exportBar").classList.add("visible");
+}
+
+function showFrame(idx) {
+  const frames = userFrames.length ? userFrames : [];
+  if (!frames.length) return;
+  idx = ((idx % frames.length) + frames.length) % frames.length;
+  currentFrameIndex = idx;
+  document.getElementById("asciiOutput").textContent = frames[idx];
+  document.getElementById("frameCounter").textContent = `${idx + 1} / ${frames.length}`;
+}
+
+function startPlayback() {
+  stopPlayback();
+  const fps = SPEED_PRESETS[activeSpeed].fps;
+  playInterval = setInterval(() => {
+    if (isPlaying && userFrames.length) {
+      showFrame(currentFrameIndex + 1);
+    }
+  }, 1000 / fps);
+  isPlaying = true;
+  const btn = document.getElementById("playBtn");
+  btn.textContent = "❚❚ PAUSE";
+  btn.classList.add("active");
+}
+
+function stopPlayback() {
+  if (playInterval) clearInterval(playInterval);
+  playInterval = null;
+}
+
+function togglePlay() {
+  isPlaying = !isPlaying;
+  const btn = document.getElementById("playBtn");
+  if (isPlaying) {
+    btn.textContent = "❚❚ PAUSE";
+    btn.classList.add("active");
+  } else {
+    btn.textContent = "► PLAY";
+    btn.classList.remove("active");
+  }
+}
+
+function stepFrame(dir) {
+  isPlaying = false;
+  const btn = document.getElementById("playBtn");
+  btn.textContent = "► PLAY";
+  btn.classList.remove("active");
+  showFrame(currentFrameIndex + dir);
+}
+
+// ── Export: measure monospace char dimensions on a temp canvas ──
+function measureMonoChar(fontSize) {
+  const c = document.createElement("canvas");
+  const x = c.getContext("2d");
+  x.font = `${fontSize}px "Courier New", monospace`;
+  const w = x.measureText("M").width;
+  return { w, h: fontSize * 1.2 };
+}
+
+// ── Export: WebM video via canvas recording ──
+async function exportWebM() {
+  if (!userFrames.length) return;
+  const btn = document.getElementById("btnWebm");
+  const overlay = document.getElementById("recordingOverlay");
+  const recText = document.getElementById("recordingText");
+  const recSub  = document.getElementById("recordingSub");
+
+  btn.disabled = true;
+  overlay.classList.add("visible");
+  stopPlayback();
+
+  const fps      = SPEED_PRESETS[activeSpeed].fps;
+  const fontSize = 10;
+  const { w: cw, h: ch } = measureMonoChar(fontSize);
+  const firstLines = userFrames[0].split("\n");
+  const rows = firstLines.length;
+  const cols = Math.max(...firstLines.map(l => l.length));
+  const canvasW = Math.round(cols * cw);
+  const canvasH = Math.round(rows * ch);
+
+  const canvas = document.createElement("canvas");
+  canvas.width  = canvasW;
+  canvas.height = canvasH;
+  const ctx = canvas.getContext("2d");
+  const textColor = COLOR_HEX[currentColor] || "#00ff41";
+  const bgColor   = "#080808";
+
+  // Check codec support
+  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+    ? "video/webm;codecs=vp9"
+    : "video/webm";
+
+  const stream   = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+  const chunks   = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+  recorder.start();
+
+  const msPerFrame = Math.round(1000 / fps);
+  const total = userFrames.length;
+
+  for (let fi = 0; fi < total; fi++) {
+    const lines = userFrames[fi].split("\n");
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, canvasW, canvasH);
+    ctx.fillStyle = textColor;
+    ctx.font = `${fontSize}px "Courier New", monospace`;
+    ctx.textBaseline = "top";
+    for (let li = 0; li < lines.length; li++) {
+      ctx.fillText(lines[li], 0, li * ch);
+    }
+    recText.textContent = `Rendering frame ${fi + 1} / ${total}`;
+    recSub.textContent  = `${Math.round(((fi + 1) / total) * 100)}% complete`;
+    await new Promise(r => setTimeout(r, msPerFrame));
+  }
+
+  recorder.stop();
+  await new Promise(r => { recorder.onstop = r; });
+
+  const blob = new Blob(chunks, { type: mimeType });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = "ascii-animation.webm";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+  overlay.classList.remove("visible");
+  btn.disabled = false;
+  startPlayback();
+  showToast("Video downloaded!", "success");
+}
+
+// ── Export: self-contained HTML embed snippet ──
+function copyEmbedCode() {
+  if (!userFrames.length) return;
+
+  const fps    = SPEED_PRESETS[activeSpeed].fps;
+  const color  = COLOR_HEX[currentColor] || "#00ff41";
+  const uid    = "av" + Date.now().toString(36);
+  const ms     = Math.round(1000 / fps);
+
+  // Encode frames as a compact JSON array embedded directly in the script
+  const framesJson = JSON.stringify(userFrames);
+
+  const snippet = `<!-- ASCII2Video Embed — paste anywhere in your HTML -->
+<div style="background:#080808;border-radius:10px;overflow:auto;display:inline-block;padding:1rem 1.25rem;max-width:100%">
+  <pre id="${uid}" style="font:10px/1.2 'Courier New',Courier,monospace;color:${color};white-space:pre;margin:0;"></pre>
+</div>
+<script>
+(function(){
+  var f=${framesJson};
+  var i=0,e=document.getElementById("${uid}");
+  if(!e)return;
+  e.textContent=f[0];
+  setInterval(function(){e.textContent=f[i=(i+1)%f.length];},${ms});
+})();
+<\/script>`;
+
+  navigator.clipboard.writeText(snippet)
+    .then(() => showToast("Embed code copied to clipboard!", "info"))
+    .catch(() => {
+      // Fallback: show in a prompt so user can copy manually
+      const ta = document.createElement("textarea");
+      ta.value = snippet;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      showToast("Embed code copied!", "info");
+    });
+}
+
+// ── Export: raw JSON frame data ──
+function downloadJson() {
+  if (!userFrames.length) return;
+  const data = JSON.stringify({
+    fps:    SPEED_PRESETS[activeSpeed].fps,
+    detail: DETAIL_PRESETS[activeDetail].label,
+    style:  activeStyle,
+    color:  COLOR_HEX[currentColor] || "#00ff41",
+    frames: userFrames,
+  }, null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = "ascii-frames.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast("JSON downloaded!", "success");
+}
+
+// ── Export button listeners ──
+document.getElementById("btnWebm").addEventListener("click", exportWebM);
+document.getElementById("btnEmbed").addEventListener("click", copyEmbedCode);
+document.getElementById("btnJson").addEventListener("click", downloadJson);
+
+// ── Color picker ──
+document.querySelectorAll(".color-dot").forEach(dot => {
+  dot.addEventListener("click", () => {
+    document.querySelectorAll(".color-dot").forEach(d => d.classList.remove("active"));
+    dot.classList.add("active");
+    const color = dot.dataset.color;
+    currentColor = color;
+    const out = document.getElementById("asciiOutput");
+    out.className = color === "green" ? "" : color;
+  });
+});
+
+// ── File handling ──
+const dropZone   = document.getElementById("dropZone");
+const fileInput  = document.getElementById("fileInput");
+const processBtn = document.getElementById("processBtn");
+const dropIcon   = document.getElementById("dropIcon");
+const dropText   = document.getElementById("dropText");
+const dropFmts   = document.getElementById("dropFormats");
+let selectedFile = null;
+
+// A single persistent click listener — always targets the same fileInput element
+dropZone.addEventListener("click", () => fileInput.click());
+
+dropZone.addEventListener("dragover", e => {
+  e.preventDefault();
+  dropZone.classList.add("drag-over");
+});
+
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith("video/")) {
+    setSelectedFile(file);
+  } else {
+    showDropError("Please drop a video file");
+  }
+});
+
+fileInput.addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (file) setSelectedFile(file);
+});
+
+function setSelectedFile(file) {
+  selectedFile = file;
+  const size = (file.size / 1024 / 1024).toFixed(1);
+  // Update in-place so the fileInput element stays in the DOM
+  dropIcon.textContent = "▶";
+  dropText.innerHTML = `<strong>${escHtml(file.name)}</strong><br>${size} MB — ready to process`;
+  dropFmts.textContent = 'Adjust settings, then click "PROCESS VIDEO"';
+  processBtn.disabled = false;
+}
+
+function showDropError(msg) {
+  const prev = dropText.innerHTML;
+  dropText.innerHTML = `<span style="color:var(--pink)">${msg}</span>`;
+  setTimeout(() => { dropText.innerHTML = prev; }, 2000);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ── Process button ──
+processBtn.addEventListener("click", async () => {
+  if (isProcessing) {
+    cancelProcessing = true;
+    return;
+  }
+  if (!selectedFile) return;
+
+  isProcessing = true;
+  cancelProcessing = false;
+  processBtn.textContent = "CANCEL";
+  processBtn.classList.add("cancel");
+
+  document.getElementById("progressWrap").classList.add("visible");
+  document.getElementById("outputTitle").textContent = selectedFile.name;
+  stopPlayback();
+
+  try {
+    const frames = await processVideo(selectedFile);
+    if (!cancelProcessing && frames.length > 0) {
+      setFrames(frames);
+    } else if (cancelProcessing) {
+      document.getElementById("progressText").textContent = "Cancelled";
+    }
+  } catch (err) {
+    document.getElementById("progressText").textContent = "Error: " + err.message;
+    console.error(err);
+  }
+
+  setTimeout(() => {
+    document.getElementById("progressWrap").classList.remove("visible");
+  }, 1500);
+
+  isProcessing = false;
+  cancelProcessing = false;
+  processBtn.textContent = "PROCESS VIDEO";
+  processBtn.classList.remove("cancel");
+});
+
+// ── Detail Level ──
+document.getElementById("detailTrack").addEventListener("click", e => {
+  const step = e.target.closest(".detail-step");
+  if (!step) return;
+  activeDetail = parseInt(step.dataset.idx);
+  document.querySelectorAll(".detail-step").forEach((s, i) =>
+    s.classList.toggle("active", i === activeDetail)
+  );
+  document.getElementById("detailDesc").textContent = DETAIL_PRESETS[activeDetail].desc;
+});
+
+// ── Animation Speed ──
+document.getElementById("speedPills").addEventListener("click", e => {
+  const pill = e.target.closest(".speed-pill");
+  if (!pill) return;
+  activeSpeed = parseInt(pill.dataset.idx);
+  document.querySelectorAll(".speed-pill").forEach((p, i) =>
+    p.classList.toggle("active", i === activeSpeed)
+  );
+  document.getElementById("speedDesc").textContent = SPEED_PRESETS[activeSpeed].desc;
+  // Update playback speed live if already playing
+  if (userFrames.length) startPlayback();
+});
+
+// ── Art Style ──
+document.getElementById("styleGrid").addEventListener("click", e => {
+  const card = e.target.closest(".style-card");
+  if (!card) return;
+  activeStyle = card.dataset.style;
+  document.querySelectorAll(".style-card").forEach(c =>
+    c.classList.toggle("active", c === card)
+  );
+});
+
+// ── Brightness Mode (invert) ──
+document.getElementById("invertSeg").addEventListener("click", e => {
+  const btn = e.target.closest(".invert-btn");
+  if (!btn) return;
+  activeInvert = btn.dataset.invert === "true";
+  document.querySelectorAll(".invert-btn").forEach(b =>
+    b.classList.toggle("active", b === btn)
+  );
+});
+
+// ── Intersection Observer for fade-ins ──
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("visible"); });
+}, { threshold: 0.1 });
+document.querySelectorAll(".fade-in").forEach(el => observer.observe(el));
+
+// ── Boot ──
+startHeroBg();
+startExampleAnimations();
+</script>
+
+</body>
+</html>
